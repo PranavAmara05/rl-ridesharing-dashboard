@@ -1,0 +1,1014 @@
+IEEETRANSACTIONSONINTELLIGENTTRANSPORTATIONSYSTEMS,VOL.22,NO.12,DECEMBER2021 7931
+A Distributed Model-Free Ride-Sharing Approach
+for Joint Matching, Pricing, and Dispatching
+Using Deep Reinforcement Learning
+Marina Haliem , Ganapathy Mani, Vaneet Aggarwal , Senior Member, IEEE,
+and Bharat Bhargava , Life Fellow, IEEE
+Abstract—Significant development of ride-sharing services IndexTerms—Ride-sharing,deepreinforcementlearning,vehi-
+presentsaplethoraofopportunitiestotransformurbanmobility cle routing, pricing, deep Q-network, pooling, shared mobility,
+by providing personalized and convenient transportation while route planning.
+ensuring the efficiency of large-scale ride pooling. However,
+a core problem for such services is route planning for each
+I. INTRODUCTION
+drivertofulfillthedynamicallyarrivingrequestswhilesatisfying ADVANCED user-centric ride-hailing services such as
+given constraints. Current models are mostly limited to static Uber and Lyft are thriving in urban environments by
+routes with only two rides per vehicle (optimally) or three (with
+transforming urban mobility through convenience in travel to
+heuristics) (Alonso-Mora et al., 2017), at least in the initial
+anywhere,byanyone,andatanytime.Giventensofmillionsof
+allocation while not ascertaining that opposite-direction rides
+are not grouped together. In this paper, we present a dynamic, userspermonth[3],thesemobility-on-demand(MoD)services
+demand aware, and pricing-based vehicle-passenger matching introduce a new paradigm in urban mobility —ride-sharing
+and route planning framework that (1) dynamically generates or ride-splitting. These ride-hailing services, when adopting
+optimal routes for each vehicle based on onlinedemand, pricing
+shared mobility, can provide an efficient and sustainable way
+associated with each ride, vehicle capacities and locations. This
+oftransportation[4].Withhigherusagepervehicle,itsservice
+matchingalgorithmstartsgreedilyandoptimizesovertimeusing
+aninsertionoperation,(2)involvesdriversinthedecision-making canreducetrafficcongestion,environmentalpollution,aswell
+process by allowing them to propose a different price based as energy consumption, thereby enhance living conditions in
+on the expected reward for a particular ride as well as the urban environments [5]. The growth in demand for these
+destination locations for future rides, which is influenced by
+services coupled with the rise of self-driving technology
+supply-and-demandcomputedbytheDeepQ-network.(3)allows
+points towards a need for a fleet managementframework that
+customers to accept or reject rides based on their set of prefer-
+enceswithrespecttopricinganddelaywindows,vehicletypeand accommodatesboththedrivers’andcustomers’preferencesin
+carpooling preferences. These (1-3) in tandem with each other an optimal and sustainable manner. Even though the pooling
+enforcegroupingrideswiththemostroute-intersectionstogether. services provide customized personal service to customers,
+(4) Based on demand prediction, our approach re-balances
+boththedriversandthecustomersarelargelyleftoutindecid-
+idle vehicles by dispatching them to the areas of anticipated
+ing what is best for them in terms of their conveniences and
+high demand using deep Reinforcement Learning (RL). Our
+framework is validated using millions of trips extracted from preferences.Itischallengingtointroducecustomeranddriver
+the New York City Taxi public dataset; however, we consider conveniences into the framework. For example, a customer
+different vehicle types and designed customer utility functions may have a limitation on the money to spend on a particular
+to validate the setup and study different settings. Experimental
+ride as well as time constraints on reaching the destination.
+results show the effectiveness of our approach in real-time and
+On the other hand, the driver may not be willing to accept
+large scale settings.
+the customer’s convenient fare as it may negatively affect
+Manuscript received June 30, 2020; revised February 15, 2021, May 24, his/her profits since the final destination may be in a low
+2021,andJune30,2021;acceptedJuly5,2021.DateofpublicationAugust4, demandarea.Thus,areliableframeworkisneededto identify
+2021;date ofcurrent versionNovember 29,2021.Thisworkwassupported
+trade-offs between drivers’ and customers’ needs and make a
+in part by the Office of the Assistant Secretary of Defense for Health
+AffairsunderContractW81XWH-18-1-0769,inpartbytheNationalScience compromiseddecisionthat is favorable to both.Our proposed
+Foundation under Grant CNS-1618335, and in part by CISCO. This article intelligent transportation system is driven by the objective of
+waspresentedinpartatACMCSCS2020[1].TheAssociateEditorforthis
+maintainingservicelevelsforcustomerswhileaccommodating
+article wasE.I.Vlahogianni. (Correspondingauthor:VaneetAggarwal.)
+Marina Haliem and Bharat Bhargava are with the Department of Com- both drivers’ and customers’ preferences. Thus, it has the
+puter Science, Purdue University, West Lafayette, IN 47907 USA (e-mail: potential to revolutionize modern transportation systems.
+mwadea@purdue.edu; bbshail@purdue.edu).
+Thekeycontributions,in thispaper,canbe summarizedas:
+Ganapathy Mani was with the Department of Computer Science, Purdue
+University, WestLafayette, IN47907USA.HeisnowwithQualcomm,San • We present a novel dynamic, Demand-Aware and
+Diego,CA92121USA(e-mail: manig@purdue.edu).
+Pricing-based Matching and route planning (DARM)
+VaneetAggarwaliswiththeSchoolofIndustrialEngineeringandtheSchool
+of Electrical and Computer Engineering, Purdue University, WestLafayette, frameworkthat is scalable up to the maximumcapacity per
+IN47907USA(e-mail:vaneet@purdue.edu). vehicle in the initial assignment phase. In the optimization
+This article has supplementary downloadable material available at
+phase, this algorithm takes into account the near-future
+https://doi.org/10.1109/TITS.2021.3096537, providedbytheauthors.
+Digital ObjectIdentifier 10.1109/TITS.2021.3096537 demand as well as the pricing associated with each ride in
+1558-0016©2021IEEE.Personaluseispermitted, butrepublication/redistribution requires IEEEpermission.
+Seehttps://www.ieee.org/publications/rights/index.html formoreinformation.
+Authorized licensed use limited to: Amrita School of Engineering. Downloaded on April 07,2026 at 15:37:29 UTC from IEEE Xplore. Restrictions apply.
+7932 IEEETRANSACTIONSONINTELLIGENTTRANSPORTATIONSYSTEMS,VOL.22,NO.12,DECEMBER2021
+order to improve the route-planning by eliminating rides
+heading towards opposite directions and applying insertion
+operations to vehicles’ current routes.
+• In addition to our matching and route-planning (DARM)
+framework, we integrate a novel Distributed Pricing
+approach for Ride-Sharing -with pooling- (DPRS) frame-
+work where, based on their convenience, customers and
+drivers get to weigh-in on the decision-making of a par-
+ticular ride. The key idea is that the passengers are offered
+price based on the additional distance given the previous
+matched passengers thus prioritizing the passengers which
+will have intersections in the routes to be groupedtogether.
+• In the DPRS framework, drivers are allowed to propose a
+price based on the location of the ride that accounts for the
+rewardofDQNbasedonthedestinationlocation.Similarly,
+customers can either accept or reject rides based on their Fig.1. Overallarchitecture oftheproposedframework.2
+pricing and timing thresholds, vehicle type, and number of
+decidedinagreedyfashion)arethenoptimizedinadistributed
+people to share a ride with.
+manner (per vehicle) in order to meet the vehicle’s capacity
+• Our joint (DARM + DPRS) framework increases the profit
+constraints as well as minimize customers’ extra waiting
+margins of both customers and drivers, and the profits are
+time and driver’s additional travel distance. This framework
+also fed back to the reinforcementlearningutility functions
+involves customers and drivers (will be referred to as Agents
+that influence the Q-values learnt using DQN for making
+henceforth) in the decision-making process. They learn the
+the vehicles’ dispatch decisions. The optimization problem
+best pricing actions based on their utility functions that
+isformulatedsuchthatournoveltyframeworkminimizesthe
+dynamically change based on each agent’s set of preferences
+rejection rate, customers’ waiting time, vehicles’ idle time,
+andenvironmentalvariables.Moreover,vehicleslearnthebest
+the total number of vehicles to reduce traffic congestion,
+future dispatch action to take at time step t, taking into
+fuel consumption, and maximizes the vehicle’s profit.
+consideration the locations of all other nearby vehicles, but
+• We simulate the ride-sharing system1 using real-world
+withoutanticipating their future decisions. Note that, vehicles
+dataset of New York City’s taxi trip records (15 million
+getdispatchedtoareasofanticipatedhigh-demandeitherwhen
+trips) [38]. Experimental results show that our novel Joint
+they first enter the market, or when they spend a long time
+(DARM+DPRS)frameworkprovides10timesmoreprofits
+being idle (searching for a ride). Vehicles’ dispatch decisions
+fordriverswhencomparedtovariousbaselines,whilemain-
+are made in parallel, since drivers learn the location updates
+taining waiting times of <1 min. for customers. Besides,
+of other vehicles in real-time (e.g., GPS), so it is unlikely for
+we show a significant improvement in fleet utilization,
+two drivers to take actions at the same exact time. Therefore,
+utilizing only 50% of the vehicles allowed by the system
+our algorithm learns the optimal policy for each agent inde-
+to fulfill≈96%ofthe demand,in contrastto baselinesthat
+pendently as opposed to centralized-based approaches [32].
+utilize > 80% of allowed vehicles to serve <60% of the
+demand.
+A. Model Architecture
+The rest of this paper is organized as follows: The
+Figure1showsthebasiccomponentsofourjointframework
+detailed related work is provided in Appendix A. Section II
+andtheinteractionsteps(inpurple)betweenthem.Weassume
+describes the overall architecture of our framework as well
+thatthe centralcontrolunitis responsiblefor:(1)maintaining
+as the model parameters. Section III, explains our dynamic,
+the states such as current locations, current capacity, destina-
+demand-aware, and pricing-based matching and route plan-
+tions, etc., for all vehicles. These states are updated in every
+ning.InSectionIV,weprovidedetailsforourpricingstrategy,
+time step based on the dispatching and matching decisions.
+including customers’ and drivers’ utility functions and their
+(2) The control unit also has some internal components that
+decision-making processes. In Section V, we describe the
+help manage the ride-sharing environment such as: (a) the
+DQN-based approach utilized for dispatching idle vehicles.
+estimated time of arrival (ETA) model used to calculate and
+Simulation setup and experimental results are presented in
+continuously update the estimated arrival time. (b) The Open
+Section VI. Finally, Section VII concludes the paper.
+SourceRoutingMachine (OSRM) modelused to generatethe
+vehicle’s optimal trajectory to reach a destination, and (c) the
+II. DISTRIBUTED JOINT MATCHING, PRICING, AND (DemandPrediction)modelusedto calculate the futureantic-
+DISPATCHINGFRAMEWORK ipateddemandinallzones.Weadoptthesethreemodelsfrom
+We propose a novel distributed framework for matching, [32];whosedetailsandtheirrelevantcalculationsareprovided
+pricing, and dispatching in ride-sharing environments using inAppendixB. Foreverytimestep, first, theriderequestsare
+Deep Q-Network (DQN), where initial matchings (that are inputto thesystem (Step 1in Fig. 1)alongwith theheatmap
+for supply and demand (which involves demand prediction
+1Thecodeforthis workis available at https://github.itap.purdue.edu/Clan-
+labs/Dynamic_Matching_RS. 2Enlargedfigureisprovided inFig.7inAppendixD.
+Authorized licensed use limited to: Amrita School of Engineering. Downloaded on April 07,2026 at 15:37:29 UTC from IEEE Xplore. Restrictions apply.
+HALIEMetal.: DISTRIBUTEDMODEL-FREERIDE-SHARINGAPPROACH 7933
+in the near future) [Step 2 in Fig. 1]. Then, based on the Algorithm 1 Joint RideSharing Framework
+predicted demand, vehicles adopt a dispatching policy using
+1: Initialize vehicles’ states X0 att0.
+DQN, where they get dispatched to zones with anticipated 2: fort∈T do
+high demand (Step 3). This step not only takes place when 3: Fetch allriderequests attimeslott, Dt.
+4: Fetch allvehicles thatentered themarketintimeslott, Vnew.
+vehicles first enter the market (lines 3-4 in Algorithm 1), 5: Dispatch Vnew tozones withanticipated highdemand-Algorithm 4
+but also when they experience large idle durations (at the 6: Fetch allavailable vehicles attimeslott, Vt.
+end of every time step, this gets checked for - lines 23-24 7: for eachvehicle Vj ∈Vt ...do
+8: Obtaininitial matching Aj usingAlgorithm 2inIII-A.
+(Step9)).Then,eachvehiclereceivestheupdatedenvironment 9: for eachriderequestri ∈ Aj ...do
+statefromthecontrolunitandperformsinitialgreedyvehicle- 10: Obtain initial price Pinit (ri )using(2).
+p ( m P o a r a r i s c x s e m e im n o E g u r e s e m t r ) i ( m s p g ) a a e m s t t i s s o a e n a t n c s g h s m e i i g r n o n g c d e a e ( d p l S , a t t c e o e i p a ty c t 4 h . h e N in v e n e x e F h t a i i , g r c e c . l s e o t m 1 c v ) m a , e l h w u c i u n h c l i l e a c e r t a e e t b s in o a g s n th e e w d e r i e o t c h q o n u r t e r h i e t s e s - t 1 1 1 1 1 2 3 4 : : : : P O U C e a p b r l d t f c a o a u i r t n l e m at S t e r r V  i o p fi j u [ n t t r a i e i m l ] p p e b l r a a T i n c s i n e e d i b n P a g o s ( n e r u d i s c ) i o o n b s n g a t( s S V A e V  d j lg j , [ o o S r n r V i  i ] t j S h [ u m V  r s i j i ] [ n 3 ) r g . i i ] n E u T I s I A i I n -B g m . ( o 3 d ) e . l.
+spondinginitial pricingassociated with each request(Step 5).
+15: Get customeri’sdecisionC
+d
+i on P(ri )using(4)&(5).
+16: if Ci ==1then
+A
+ul
+f
+e
+te
+t
+r
+h
+w
+at
+ar
+p
+d
+e
+,
+r
+e
+f
+a
+o
+c
+rm
+h
+s
+ve
+a
+h
+n
+ic
+i
+l
+n
+e
+s
+e
+e
+x
+rt
+e
+io
+cu
+n
+t
+-
+e
+b
+s
+as
+it
+e
+s
+d
+m
+ro
+a
+u
+tc
+t
+h
+e
+in
+p
+g
+la
+o
+n
+p
+n
+t
+i
+i
+n
+m
+g
+iz
+(S
+er
+te
+m
+p
+o
+6
+d
+)
+-
+.
+17: Up d date SVj ←S
+V
+
+j
+[ri ].
+18: else
+Inthisstep,vehiclesreachtheirfinalmatchingslistbydealing 19: Insertri to Dt+1
+with theirinitialmatchingslist inthe orderoftheirproximity, 20: Updatethestatevector st.
+performing an insertion operation to its current route plan
+21: Retrieve nextstopfrom SVj .
+22: Headtonextstop(whether apickuporadropoff).
+(as long as this insertion satisfies the capacity, extra waiting 23: Fetch allidlevehicles withIdle_duration>10minutes, Vidle.
+time, and additional travel distance constraints to guarantee 24: Dispatch Vidle tozoneswithanticipated highdemand-Algorithm 4
+that serving this request would yield a profit). Using the
+25: Updatethestatevectorst.
+expected discounted reward learnt from DQN (in step 3), algorithmoverT timesteps,eachofdurationt.Idlevehicles
+and the ride’s destination, vehicles weigh their utility based make decisions on where on the map to head-to to serve the
+on the potential hotspot locations, and propose new pricing demandateachtimestep τ =t ,t +t,t +2(t),...,t +
+0 0 0 0
+for the customer (at the end of steps 5 and 6). This takes T(t)wheret isthestarttime.Below,wepresentourmodel
+0
+place on a customer-by-customerbasis, where a vehicle upon parameters and notations:
+inserting a customer into its current route plan, proposes to 1) Demand: We denote the number of requests for zone m
+him/her the new price (Step 7). Then, the customer has the at time t as d t,m . The future pick-up request demand in
+ability to accept or reject based on their own independent each zone is predicted through a historical distribution of
+utility function (Step 8 in Fig. 1). Finally, upon receiving the trips across the zones [39], and is denoted by D t:T =
+customer’s decision, the driver either confirmsthe addition of (d t ,...,d t+T ) from time t 0 to t +T.
+this ride to its route plan or removes it. Algorithm 1 shows 2) Vehicle States: We use X t = {x t,1 ,x t,2 , ... ,x t,N } to
+the overall flow of our framework. Note that lines (7-22) that denote the N vehicles’ status at time t. x t,n tracks vehicle
+correspondtosteps (3-9)takeplaceinparallelateachvehicle. n’s state variables at time step t. For a given vehicle,
+The proposed model is distributed in the sense that each we keep track of its: (1) current location/zone V , (2)
+loc
+vehicle solves its own DQN and utilizes the output Q-values current capacity V , (3) type V , (4) maximum capacity
+C T
+to make matching, pricing, route planning, and dispatching CV , (5) Pick-up time for each passenger, and (6) the
+max
+decisions, without communicating with other vehicles in its destination of each passenger. A vehicle is considered
+vicinity. However, a vehicle would consider the locations of available if at least one of its seats is vacantthat is, if and
+nearby vehicles while making its independent decisions. So, only if V <CV .
+C max
+a vehicle can communicate with the control unit, as needed, 3) Supply:Ateachtimeslott,thesupplyofvehiclesforeach
+to request new information of the environment (prior to zone is projected to future time t ˜ . d t,t˜,m is the number of
+makingdecisions)orupdateitsownstatus(afteranydecision). vehicles that are currently unavailable at time t but will
+˜
+becomeavailableattimet astheywilldrop-offcustomer(s)
+B. Model Parameters and Notations
+at region m. This information can be ascertained using
+We built a ride-sharing simulator to train and evaluate our the ETA prediction for all vehicles. Consequently, we can
+framework.We simulate New York City as ourarea of opera- predict the number of vehicles in each zone, from time
+tion, where the map is divided into multiple non-overlapping t 0 to time t +T, denoted by V t:t+T which serves as our
+regions,a gridwith each1 squaremile beingtaken asa zone. predicted supply in each zone for T time slots ahead.
+This allows us to discretize the area of operation and thus
+Our framework keeps track of the rapid changes of all these
+makes the action space—where to dispatch the vehicles—- variablesandseekstomakethedemand,d , ∀t andsupplyv ,
+t t
+tractable. This discretization prevents our state and action ∀t close enough (mismatch between them is zero).
+spacefromexplodingtherebymakingimplementationfeasible.
+We use m ∈{1,2,3,··· ,M} to denote the city’s zones, and III. DARM FRAMEWORK FOR MATCHINGAND ROUTE
+n to denote the number of vehicles. A vehicle is marked as
+PLANNING
+available if it has any remaining seating capacity. Available NP-Hardness: The ride-sharing assignment problem is
+vehiclesinzonei attimeslott isdenotedv t,i .Weoptimizeour proven to be NP-hard in [20] as it is a reduction from the
+Authorized licensed use limited to: Amrita School of Engineering. Downloaded on April 07,2026 at 15:37:29 UTC from IEEE Xplore. Restrictions apply.
+7934 IEEETRANSACTIONSONINTELLIGENTTRANSPORTATIONSYSTEMS,VOL.22,NO.12,DECEMBER2021
+3-dimensional perfect matching problem (3DM). In 3DM, shareable mobility services [5], [40] by setting α = 1 and
+given a number of requests with source and destination loca- β = 0. Further, the existing literature proved that there is
+tionsandanumberofavailablevehiclelocations,thetaskisto no optimal method to maximize the total revenue for the
+assignvehiclestorequests.However,in[20],theauthorslimit basic route planning problem (which is reducible to our
+thisallocationtoonlytworequestssharingthesamevehicleat DARM problem) using neither deterministic nor randomized
+a time using an approximationalgorithm that is 2.5 times the algorithms [5], [22]. Thus, the same applies to our DARM
+optimal cost. They approach this problem by pairing requests problem. However, several studies show that Insertion is an
+first greedily, and then using bipartite graphs to match each effective approach to greedily deal with the shared mobility
+vehicle to one pair of requests, while assigning the maximum problem. We propose an insertion based framework, similar
+number of requests with the minimum total cost. Heuristic to the idea in [28], to optimize our matching framework.
+approaches for 3 rides per vehicles have been considered However, in [28], authors group together close-by requests
+in [2]. In our approach,we don’tlimit matching to only two- withoutconsideringif their destinationsare in oppositedirec-
+threerequests;instead,we goas farasthe maximumcapacity tions,whileourapproachmitigatethisproblem.Also,[28]use
+of a vehicle allows (satisfying the capacity constraint), which denwicktree to speeduptheir operationswhilewe utilize our
+significantly boosts the acceptance rate of passengers. OSRM module as will be explained below. Note that, in our
+Our dynamic, demand-aware, and pricing-based DARM framework, this optimization step is impacted by the pricing
+framework goes through two phases: decisionsthataremadebasedontheQ-valueslearntfromour
+DQN. In this aspect, our approach can achieve better results
+Algorithm 2 Greedy Assignment
+inarelativelylongtimeperiodusingthenearfuturepredicted
+1: Input: Available Vehicles Vt with their locations loc(Vj ) such demand (that is part of the DQN input) to overcome the
+a th s a s t o : c V ia j te ∈ d V w t i , th R r id i e ∈ R D eq t. uests Dt withoriginoi anddestinationdi short-sightedness problem of the basic insertion algorithms.
+2: Output: Matching decisions Aj foreach Vj ∈Vt In DARM, we follow the idea of searching each route and
+3: Initialize Aj =[],V
+c
+j
+apacity
+=V
+C
+j foreach Vj ∈Vt. locallyoptimallyinsertingnewvertex(orvertices)intoaroute.
+4: for eachri ∈Dt ... do In our problem, there are two vertices (i.e., origin o
+i
+and
+5: Obtainlocations ofcandidate vehicles Vcand,suchthat:
+destination d ) to be inserted for each request r . We define
+|loc(Vj )−oi |≤5km2 AND(V c j apacity +|ri |)≤Cm V a j x. the insertion i operationas: given a vehicle V with i the current
+6: Calculate trip time Tj,i ∈ Tcand,i from each loc(Vj ) ∈ Vcand j
+route S , and a new request r , the insertion operation aims
+7 8 : : t P P o u ic o s k h i V u r s i j in t w o g h A t o h s j e e E T T j A ,i = mo a d rg e m l. in(Tcand,i )toserverideri. t S o fin w d it V h a j n th e e w m fe in a i s m ib u le m ro in u c te rea S s V  i e j d b c y os in t, se th rt a i t ng is o t i he an m d in d i i m in u t m o
+9: Updateloc(Vj )←oi Vj
+1 1 0 1 : : Re I t n u c r r n em A e t n = t V [A c j a j p , ac A it j y + ← 1 ,. V . c . j a , p A ac n it ] y , + wh |r e i r | en=|Vt |. e in xtr S a Vj tra u v n e c l ha d n is g t e a d nc i e n , w S V  h j i . le S m pe a c i i n fi ta c i a n ll i y n , g fo th r e a o n rd e e w r o re f q v u e e r s t t ic r e i s ,
+thebasicinsertionalgorithmcheckseverypossiblepositionto
+A. Initial Vehicle-Passenger(s) Assignment Phase
+insert the origin and destination locations and return the new
+TheinitialassignmentisrepresentedinAlgorithm2.Inthis route such that the incremental cost is minimized. To present
+phase,eachvehiclehavingtheknowledgeofthefuturedemand our cost function, we first define our distance metric, where
+(fed from the control unit) D t:t+T at each zone, the vehicles’ given a graph G we use our OSRM engine to pre-calculate
+status vectors X including their current locations as well as all possible routes over our simulated city. Then, we derive
+t
+the origin o and destination d locations for each request r , the distances of the trajectories (i.e., paths) from location a
+i i i
+performs a greedy matching operation. This is where each to location b to define our graph weights. Thus, we obtain a
+request r gets assigned to the nearest available vehicle to it, weighted graph G with realistic distance measures serving as
+i
+satisfying the capacity constraints. In other words, we define itsweights.Weextendtheweightnotationtopathsasfollows:
+the capacity constraint to be: the number of all requests w(a 1 ,a 2 ,...,a n )= n i= − 1 1w(a i ,a i+1 ).
+assignedtovehicleV islessthanitsmaximumcapacityC Vj Thus,wedefinethecostassociatedwitheachnewpotential
+j max
+a li t st a o n f y in ti i m tia e l . m A a t tc th h e in e g n s d A o j f = th [ i r s 1 p ,r h 2 a , s . e . , . e , a r c k h ], v w e h h e ic r l e e k V ≤ j h C a m V s a j x a r w o ( u r t i e , / r p i a + th 1 , S .. V  .j r k = ) [ r r e i , su r i l + ti 1 n , g .. f . r , o r m k ] t t h o is be sp th e e cifi co c st( o V rd j e , r S in V  g j ) o = f
+vertices (origin and destination locations of the k requests
+assuming that each request has only one passenger. Assume
+the passenger count per request is | r i |, and the vehicle V j assigned to vehicle V j ). Besides, we derive the cost of the
+arrives at location z. Then, to check the capacity constraint original route to calculate the increased costs for every new
+i t n hat O r ( e 1 f ) er t s im to e, t w he e t d o e ta fi l ne ca v p e a h c i i c ty le o V f j t ’ h s e cu re rr q e u n e t st c s ap th a a c t ity are V C s j[ ti z l ] l r tw ou o te re S q V  u j e [ s r t i s ]. r T x o a i n ll d us r t y r , at i e ts ,a lo ss c u a m tio e n A is j f l o o r c( v V eh j ) ic a le nd V i j ts ha c s ur o r n e l n y t
+on-board of V j wh  en it arrives at that location z as follows: p ro ic u k te s h S a  s r o x f a i l n re s a e d rt y in i g ns r erte i d nto as: its [lo c c u ( r V re j n ), t o r x o , u d te x , ]. s T uc h h en t , h V at j :
+V C j[z]= V V C C j j [ [ z z − − 1 1 ] ] + − | | r r i i | | i i f f z z = = = = o d i i (1) c w o ( s l t o ( c V ( j V , V j S j ) V  ,j o [r y , y ] o ) x = ,d m x , i d n y [w ) y , ( w lo ( c lo (V c( j V ), j o ), x o , y o , y o , x d , x d , y d , y d ), x ),
+w(loc(V ),o ,o ,d ,d ),w(loc(V ),o ,d ,o ,d ),
+j x y y x j x x y y
+B. Distributed Optimization Phase w(loc(V ),o ,d ,o ,d )]. Note that the last two optional
+j y y x x
+Our demand-aware route planning problem is a variation routes complete one request before serving the other, hence
+of the basic route planning problem (which is NP-hard) for theydonotfitintotheride-sharingcategory.However,westill
+Authorized licensed use limited to: Amrita School of Engineering. Downloaded on April 07,2026 at 15:37:29 UTC from IEEE Xplore. Restrictions apply.
+HALIEMetal.: DISTRIBUTEDMODEL-FREERIDE-SHARINGAPPROACH 7935
+consider them as we optimize for the fleet’s overall profits Algorithm 3 Insertion-Based Route Planning
+and total travel distance. Also, note that these two routes will 1: Input: Vehicle Vj, its current route SVj , a request ri = (oi ,di ) and
+still serve both requests and thus would not affect the overall weightedgraphGwithpre-calculated trajectories usingOSRMmodel.
+acceptance rate of our algorithm. They may just increase the 2: Output: Route S V  j afterinsertion, withminimumcost(Vj ,S V  j ).
+c r N t r h e o u o s e u s u n t t t e o e lt t . m s t h h O e e a t r t h t fi h s a ’ e i r t f s r t w w t t h h r a i e e i s i s q e ti c , u n w u e i g t a s s s t t w o ti w t m i m h l i l e e l e l r b fi s b e a ’ r e s d w l t j e i u t a a a t s l i l l e t l t t i o , n w a c g d h a i d t t o h i t e w o i d m ( n e l v t i e m o k e e r i a i s , t d a s w e l v l c e e t u r r o e r y s q r t h e h u r n o e i e s t w a s l t y s v s o e i e n n i h m n a i b c o p t l l h u t e e y e r , . 6 3 4 7 5: : : : : i I f ni c R S t o S V i  e a s V t j t l u j ( i ← z V r e i n s j , S [ e S l S V  m o V   V  j c p j j ( , = t ) V y c = j o t S ) h s V , w t e ( o j n ( V , i S , j P V  d , o j i S ) ] s V  . . [ j o ) i ]=NULL,costmin =+∞.
+list)byfollowingtheinsertionoperationabove.Then,thecost
+8: foreach x in1to|SVj |do
+o c w o f o s s r t e k ( r V s v i j i n , ng A ad j a ) i l s l t = k rib r u eq te r u d i e ∈ s f M a ts s j h i c n i o o s m n t( w a V t h c j , h er i S n e V  g e j a [ A r c i h j ]) v i . s e F h in i i n c t a l u e ll r m y n , i d n th e im fi is n iz e p e d h s a a i s t s e s : 1 1 9 1 0 : : : S i C V f x a j c lc o : u s = t l ( a V I te n j , s c e S o r V x s t t j ( o ) V i < j a , t c S o x V x s j − tm ) i t = n h w t i h n ( e S S n V x V j j ) . .
+• t g r o a E i w i e v s n s a e i i t s c t l h o i o h a c n r l o e t v e a s a p e d t c r h , c h i i a c f u c o e s s r l c e l e t l o e P q o V n m i u w n d j e i e i i t s r n r n t e - g ( g b c a r l y e i A s y i - v i c l e b n g e u x a o s s p s t r t h i l e o i t a t d a s m h i t n i m o e n e l n i r d i s t 3 b t i p i . . a a n r l T T s o m i S h x h s e i i i a s m s a c t s c t d i i i h t n o i f y s i o i n n t t l r t i g l o a I i o b s V l w u v l - m i t A e s s e h : a t d ) i t A c c a p l h s e j r s i , o n o V a c g c n e s i d d . a u t l a e i r s n d e t 1 1 1 1 1 1 2 6 3 5 4 7 : : : : : : f S o V  r C S j V e y a = c P a j l o c c o s u h S : s t = l V  m [ a  y o j i t , n i I e i ] n n c ← c s ← o o e P s r s t o m t t c x ( s o V i , d [ n s o i j S t( i , = V  a V ]  S t j + j V + y y , ← j ∞ 1 S − ) V x t = S . o j t V h x ) w . | j S i . ( n V  S  j V y S | j V  d ) j . o .
+• T pr h o e x n i , m e i a ty c , h in v s e e h r i t c in le g V in j to co i n ts si c d u e r r r s en e t ac r h ou r t i e. ∈ Fo A r j , ea in ch o r r e d q j e u r e o s f t 1 19 8 : : if c c o o s s t t m (V in j , ← S V y j c ) os < t(V co j s , t S m V y in j ). then
+r in i , se t r h t e io v n e i h n i t c o le it a s rr c i u v r e r s en a t t r t o h u e te m ( i a n s im d u e m scr c ib o e s d t(V ab j , ov S e V  ) j . [r y ]) of 2 2 0 1 : : Retu S rn V  j S ← V  j , S c V y o j s , t( c V o j s , t( S V V  j j , ) S V  j )←costmin.
+• Now,giventheinitialpriceassociatedwiththisrequest P init
+and the new route S  [r ] (which may involve detours to to further reduce the computation needed, we first find the
+Vj y optimalposition Pos[o ]toinserto andthen,findtheoptimal
+servethisrequest),thevehiclecanre-calculatethepricingto i i
+position Pos[d ] to insert d we only consider positions
+account for any extra distance, by feeding the new distance i i
+starting from Pos[o ]+1. Therefore,we never have to check
+into Eq. (2) in Section IV-A. i
+allpermutationsofpositions, we onlycheckn2 optionsin the
+• Afterwards, drivers will then modify the pricing based on
+ride-sharing environment as we check the route feasibility in
+the Q-valuesof the driver’sdispatch-tolocations. Using the
+O(1) time. This is further reflected in the capacity constraint
+DQNdispatchpolicyonaregularbasis,drivershavegained
+defined in phase 1, where we borrow the idea of defining the
+insight about which destinations can yield him/her a higher
+smallestpositiontoinsertoriginwithoutviolatingthecapacity
+profit.So,theyweighinontheirutilityfunctionandpropose
+constraintfrom[20]as Ps[l],thecapacityconstraintofvehicle
+a new pricing to the customer (explained in Section IV-B).
+V will be satisfied if and only if: Ps[l] ≤ Pos[o ]. Here,
+• Finally,thecustomer(s)canacceptorrejectbasedonhis/her j i
+we need to guarantee that there does not exist any position
+utility function as explained in Section IV-C. If a customer
+accepts, the vehicle updates its route S Vj to be S V  j [r y ], l ot ∈ he ( r P th o a s n [o i P ], s[ P l] os to [d s i a ] t ) is s f u y ch Ps th [l a ] t: ≤ V C P j[ o l] s[o ≥ ] a ( n | d r i t − h 1 us |− abi | d r e i b |) y ,
+otherwise S remains unchanged. The vehicle then pro- i
+Vj
+the capacity constraint.
+ceedstothenextcustomerandrepeatstheprocess.Rejected
+requests will be fed back into the system to be considered
+IV. DISTRIBUTED PRICING-BASED
+in the matching process initiated in the next timestep for
+RIDE-SHARING (DPRS)
+other/same vehicles.
+In this section, we explain our distributed pricing strategy
+Thekeyideaintheproposedmatchingalgorithmisthatthe
+thatisbuiltontopofourdistributedride-sharingenvironment.
+pricing of the passenger depends on the distance in the route
+Inoursimulatorsetup,we considervariousvehicletypeswith
+based on the previous matched passengers. Thus, if the new
+varying capacity, mileage, price per mile-distance, price per
+passenger is going in the opposite direction, the distance will
+waiting-minute,and base price for driverper trip denoted B .
+be larger leading to higher price, and we expect that the pas- j
+B servesasthelocalminimumearningforthedriverpertrip.
+senger would likely not accept the high price as compared to j
+anothervehiclethatisgoingtowardsthatdirection.Ofcourse,
+A. Initial Pricing
+if the customeris willingto pay thehigh price,he/shewill be
+matched. Thus, the increased pricing prioritizes passengers to Initially, each vehicle calculates a price for each of its
+be matched if their routes have intersections as opposed to if requests, taking into consideration several factors:
+they are going in opposing directions. • The total trip distance, i.e., the distance till pickup plus the
+Complexity Analysis: The complexityof the insertionoper- distance from pickup to drop off. Note that, this distance is
+ation is discussed in Appendix C. Here we discuss checking composed of the weights of the n edges that constitute the
+theroutefeasibilityinO(1).Foraroutetobefeasible,foreach vehicle’soptimalroutefromits currentlocationto origino
+i
+request r in this route, o has to come before d . Therefore, and then to destination d . This route is obtained through
+i i i i
+Authorized licensed use limited to: Amrita School of Engineering. Downloaded on April 07,2026 at 15:37:29 UTC from IEEE Xplore. Restrictions apply.
+7936 IEEETRANSACTIONSONINTELLIGENTTRANSPORTATIONSYSTEMS,VOL.22,NO.12,DECEMBER2021
+the insertion operation in Algorithm 3, as the route that which is obtained using the DQN’s Q values. This rank is
+minimizestheDARMcostfunctionafterinsertingrequestr denoted α.
+i
+andsubtractingthecostoftheoriginalroutebeforeinsertion. • Dynamically maintains a list of highest ranked λ regions
+Thus, in the optimization step, the new cost(V ,S  ) is on the map, denoted as L. This list represents the potential
+j Vj [ri ]
+plugged into the equation to get the updated pricing. hotspots on the map that are anticipated to maximize the
+• Number of customers who share travelling a trip distance driver’sprofits,andthusaredesiredzones.Itiscontinuously
+(whether all or part of it, which can be determined from updated whenever the vehicle runs its dispatch policy.
+the vehicle’s path). For simplicity, we denote it by the • After the route planning optimization step, the driver
+v o w e i h h e l i o n c c le i a t ti r o j e n ’ a s c o h c f e a s p th a th i c s e it r y d e e q s V u t C i e j n s [ a t o t i i r ] o i n w su d h b e , t n r V ac i j t t [ e d d re ] f . a r c T o h m h e u s s i , t t s w he c e a d p o e a ri c fi g i n t i y n e r c r e o o - u s c t t a e o lc S f u V  t l h j a , e te b o s y ri t p g h l i e u n g a i g n l i i r n t o i g a u l t c e o p s b r t i e ( c f V i o n j r g , e S i P V  n i j s n [ e i r t i r ( ] t ) r io i ( ) n a ) f u t i e s n r in to s g u E b t t q h r . e a ( c u 2 ti p ) n . d g T a t t h h e i d e s
+i C i
+V j[r ]=| V j[d ]−V j[o ]|. is done to account for any detours required to serve this
+C i C i C i
+• The cost for fuel consumption associated with this trip, newrequestr i ,andthusenforcesrequestsgoinginthesame
+denotedby[distancetravelled∗(P /M ),]where P rep- direction to be matched together.
+gas j gas
+resents the average gas price, and M j denotes the mileage • Knowingtherequestlocationloc(r i ),if∈ L,thedriveruses
+V the initial pricing suggested for this trip, denoted P (r ).
+for vehicle j assigned to trip i. init i
+• Otherwise, it would indicate that driver might end up in
+• The waiting time experienced by the customer (or cus-
+the middle of nowhere (i.e., region with low demand), and
+tomers) associated with trip i till pickup, denoted T.
+i
+thus receives no more requests or at least drives idle for a
+The overall pricing equation for request r is represented as:
+i
+  longdistance.Insteadofjustrejectingtherequest,thedriver
+P [r ] = B + ω1∗ cost(V j ,S Vj [ri ] ) suggests a higher price to the customer to make up for the
+init i j V j[r ] cost incurred due to mobilizing to a region of low demand.
+  C i  The price increase is influenced by both the rank of the
++ ω2∗ cost(V j ,S Vj [ri ] ) ∗( P gas) destination as well as the driver’s own base price per trip
+ V C j[r i ] M V j B j as in Eq ⎧ . (3).
+− ω3∗T i (2) ⎪⎪⎨P init (r i ) if loc(r i )∈ L
+w
+ty
+h
+p
+e
+e
+r
+.
+e
+ω
+ω
+2
+1
+i
+i
+s
+s
+s
+t
+e
+h
+t
+e
+t
+p
+o
+ri
+1
+ce
+as
+pe
+it
+rm
+do
+i
+e
+le
+sn
+d
+’
+i
+t
+st
+c
+a
+h
+n
+a
+c
+n
+e
+g
+a
+e
+cc
+a
+o
+cr
+r
+o
+d
+s
+in
+s
+g
+v
+t
+e
+o
+hi
+t
+c
+h
+l
+e
+es
+v
+,
+e
+w
+hi
+h
+c
+a
+le
+t
+P(r i )= ⎪⎪⎩[ P
+P
+in
+in
+it
+it
+(
+(
+r
+r
+i )
+i )
++
+∗
+α
+loc(ri )
+∗B j ] otherwise
+(3)
+2
+changes is the mileage in this factor. Finally, ω3 is the price
+per waiting minute that is influenced by the vehicle type, it is
+C. Customers’ Decision Function
+negative here as we want to minimize the waiting time for
+Uponthevehicle’sproposedpriceitbecomesthecustomer’s
+the customer. Our proposed algorithm will first use the initial
+price according to cost(V j ,S Vj [ri ]) and notify the vehicle (or t
+p
+u
+r
+r
+e
+n
+fe
+t
+r
+o
+en
+m
+ce
+a
+s
+k
+.
+e
+In
+hi
+o
+s
+u
+/h
+r
+e
+a
+r
+lg
+o
+o
+w
+r
+n
+ith
+d
+m
+ec
+,
+i
+w
+si
+e
+on
+co
+a
+n
+c
+s
+c
+i
+o
+d
+r
+e
+d
+r
+in
+v
+g
+ari
+t
+o
+o
+u
+h
+s
+i
+p
+s/
+r
+h
+e
+e
+fe
+r
+r
+s
+e
+e
+n
+t
+c
+o
+es
+f
+driver),whowillthenmodifythepricingbasedontheupdated
+route cost(V ,S  ) as well as the Q-values of the driver’s for each customer that constitutes their utility function:
+dispatch-to lo j cat V io j [ n ri ] (explained in Section IV-B). • Tolerance in waiting time: whether the customer is in a
+hurry and how much delay can be tolerated: denoted as
+delay/waiting time of trip i: T.
+B. Vehicles’ Proposed Pricing i
+• Preference in car-pooling: whether the customer is willing
+The core intuition behind assessing the cost/benefit of
+to share this ride or would rather take the ride alone even
+picking up a passenger is in having knowledge over the
+if it means a higher price. This is captured based on the
+supply-demand distribution over the city. This is learnt by j
+current capacity of vehicle j, denoted by V .
+each driver through the dispatch policy that they follow once C
+• Preference of vehicle type for their trip: whether he/she
+he/sheentersthe market.Thisdispatchpolicyaimsto provide
+is willing to pay more in exchange for a more luxurious
+him/her with the best next dispatch action to make, which j
+vehicle. The type of vehicle j is denoted by V .
+is predicted after weighing the expected discounted rewards T
+Basedontheaforementionedfactors,thecustomer’sutilityfor
+(Q-values) associated with each possible move on the map
+request/trip i is formulated as:
+using DQN (described in Section V). As a result of running    
+
+such a policy every dispatch cycle (set to 5 minutes in our 1 1
+U = ω4∗ + ω5∗ + ω6∗V j (4)
+simulation), the driver gains the necessary insight about how i V j T i T
+the supply-demand is distributed over the city, and thus can C
+makeinformeddecisionsonthepricingstrategythatcanyield where ω4,ω5, and ω6 are the weights associated with
+him a higher profit. This decision-makingprocess is captured each of the factors affecting the customer’s overall utility.
+as follows: With the knowledge of the expected discounted To add more flexibility, we introduce a customer’s compro-
+sum of rewards (Q-values) across the map, the vehicle: mise threshold δ to represent how much the customer i
+i
+• Ranks destinations on the map, in a descending manner, is willing to compromise in the decision-making process.
+according to the expected discounted sum of rewards, Finally,thedecisionofcustomeri toacceptorreject,denoted
+Authorized licensed use limited to: Amrita School of Engineering. Downloaded on April 07,2026 at 15:37:29 UTC from IEEE Xplore. Restrictions apply.
+HALIEMetal.: DISTRIBUTEDMODEL-FREERIDE-SHARINGAPPROACH 7937
+by Ci, after receiving the final price P(r ) for the trip 14 vertical (7 up and 7 down) and 14 horizontal (7 left and
+d i
+i is as follows: 7 right) cells and hence the action space is limited to these
+
+1 if U > P(r )−δ cells. This results in a 15 × 15 action space a t,n for each
+Ci = i i i (5) vehicle as a vehicle can move to any of these cells or remain
+d 0 otherwise
+in its own cell. After the vehicle decides on which cell to go
+to using DQN, it uses the shortest optimal route to reach its
+V. DISTRIBUTED DQN DISPATCHING APPROACH
+next stop.
+We utilize a distributed DQN dispatch policy to re-balance Reward: The reward function (in Eq. (6)) is a weighted
+idlevehiclestoareasofpredictedhighdemandandprofitsover sum of the following terms: (1) C t,n : number of customers
+thecity,wheretheycanbetterservethedemandandmaximize served by vehicle n at time t, (2) dispatch time, T t D ,n , taken
+their profits. We utilize a reinforcement learning framework, by vehicle n at time t to go to zone m or take detours to
+withwhichwecanlearntheprobabilisticdependencebetween pick up extra requests. This term discourages the agent from
+vehicle actions and the reward function thereby optimizing pickingupadditionalorderswithoutconsideringthedelayfor
+ourobjectivefunction.Idle vehiclesgetdispatchedwhenthey on-board passengers. (3) T t E ,n denotes the sum of additional
+firstenterthemarketorwhentheyexperiencelargeidletimes time vehicle n takes at time t to serve additional passengers,
+throughoutour simulation. (4) profit for vehicle n at time t: P t,n , and (5) max(e t,n −
+At every time step t, idle vehicles observe the state of the e t−1,n ,0) this term addresses the objective of minimizing the
+environment,s t,n ,andperforminferenceontheirtrainedDQN number of vehicles at time t to improve vehicle utilization.
+to predict a future reward r associated with each dispatch-to
+locationontheiractionspac t ea t,n overthemap.Basedonthis r t,n =β 1 C t,n +β 2 T t D ,n +β 3 T t E ,n
+information,theagenttakesanactionthatdirectsthevehicleto +β 4 P t,n +β 5 [max(e t,n −e t−1,n ,0)] (6)
+different dispatch zone where the expected discounted future We define the derivation of each component of our reward
+reward is maximized, i.e., ∞ j=t ηj−tr j (a t ,s t ), where η < 1 function in Appendix D-B. Although we are minimizing the
+is a time discount factor. This ultimately improves the fleet number of active vehicles in time step t, if the total distance
+utilization. The overall flow of this framework is explained or the total trip time of the passengers increase, it would
+in Algo. 4. Lines 6−8 of the algorithm specifically describe be beneficial to use an unoccupied vehicle instead of having
+the best action that a given vehicle V j infers from the trained existing passengers encounter a large undesired delay. The
+Q-networkgiventhe state s t,n andsetofpossible actionsa t,n . details of learning these Q-values associated with the action
+In our algorithm, we define the reward r t as a weighted space is provided in Appendix D-C, and the architecture of
+sum of different performance components that reflect the our Deep Q-Network is presented in Appendix D-A.
+objectives of our DQN agent. The decision variables are i) While the primary role of the DQN is to act as a means of
+Dispatching of an available vehicle in zone m, V j ∈ v t,m to dispatching idle vehicles, it contains useful signals on future
+anotherzoneattimeslott,ii)ifavehicleV j isnotfull,decide anticipated demand that is utilized by other components of
+γ j,t its availability for serving new customers at time slot t. our method including DARM matching and DPRS Pricing.
+Therewardwill be learntfromthe environmentforindividual
+Note that the profits term addedto the reward functionmakes
+vehicles and then leveraged to optimize their decisions. Thus, the output expected discounted rewards (Q-values) associated
+the overall system objective is optimized at each vehicle in with each possible move on the map, a good reflection of
+the distributed transportation network. Below, we explain the theexpectedearningsgainedwhenheadingtotheselocations.
+state, action, and reward for our dispatch policy: Thisgivesdriversaninsightaboutthesupply-demanddistribu-
+State Space: The state variables are utilized to reflect the tion overthe city which is essential in makingknowledgeable
+environment status and thus influence the reward feedback decisions when it comes to ranking their potential hotspots,
+to the agents’ actions. We combine all the environment andthusmakingthecorrespondingrouteplanningandpricing
+data explained in Section II-B: (1) (X : that keeps track of
+t decisions (Section III and Section IV-B, respectively).
+vehicles states: current zone of vehicle v, available seats,
+pick-up time, destination zone of each passenger. (2)V t:t+T : Algorithm 4 Dispatching Using DQN
+Supply prediction of the number of available vehicles at each 1: Input: Xt ,Vt:t+T ,Dt:t+T.
+zone for T time slots ahead, (3)D t:t+T : Demand prediction 2: Output: DispatchDecisions.
+at each zone for T time slots ahead. Thus, the state space
+3: Fetchallidlevehicles ←VIdle.
+4: foreachvehicle Vj ∈VIdle do
+at time t is captured by three tuples combined in one 5: Construct astatevector s(t,n)=(Xt ,Vt:t+T ,Dt:t+T ).
+vector as s t = (X t ,V t:t+T ,D t:t+T ). At each vehicle-request 6: Pushstatevector totheDeepQ-Network.
+assignment,the simulatorengineupdatesthe state space tuple
+7: Get thebestdispatch action a(t,j)=argmax[Q(s(t,n),a,θ)].
+8: Get thedestination zone Z(t,j) basedonactiona(t,j).
+with the expected pick-up time, source, and destination data. 9: Updatedispatch decisions byadding(j,Z(t,j)).
+The three-tuplestate variabless
+t
+are passed as an inputto the 10: Return DispatchLocations ∀ Vj ∈VIdle
+DQN input layer which consequently outputs the best action
+VI. EXPERIMENTALRESULTS
+to be taken.
+Action Space: an denotes the action taken by vehicle n at A. Simulator Setup
+t
+time step t. In our simulator, the vehicle can move (vertically Inoursimulator,weusedtheroadnetworkoftheNewYork
+or horizontally) at most 7 cells, it can move to any of the Metropolitan area along with a real public dataset of taxi
+Authorized licensed use limited to: Amrita School of Engineering. Downloaded on April 07,2026 at 15:37:29 UTC from IEEE Xplore. Restrictions apply.
+7938 IEEETRANSACTIONSONINTELLIGENTTRANSPORTATIONSYSTEMS,VOL.22,NO.12,DECEMBER2021
+trips in NY [38]. For each trip, we obtain the pick-up time, orders,and(ii)ifallbaselinesareachievingasimilaraccept
+passengercount,originlocation,anddrop-offlocation.Weuse rate, a lower occupancy rate indicates that a fleet is able to
+this trip information to construct travel requests demand pre- minimize the number of vehicles on the street to serve the
+diction model as well. We start by populating vehicles over requests.Notethat,inFig. 3,wealsoshowtheutilizationof
+the city, randomlyassigningeach vehiclea type andan initial each individual vehicle (i.e., percentage of time the vehicle
+location.Accordingtothetypeassignedtoeachvehicle,weset is occupied while in duty).
+the accompanying features accordingly such as: maximum • Waiting Time: this metric captures the time customers
+capacity, mileage, and price rates (per mile of travel distance had to wait till they get picked up by a vehicle (shown in
+ω1, and per waiting minute ω3). We initialize the number of seconds). We note that wait time is an importantmetric for
+vehicles, to 8000. Note that, not all vehicles are populated customer convenience with mobility-on-demandservices.
+at once, they are deployed incrementally into the market by • Profit: thismetricrepresentsthenetprofitofeachdriverper
+each time step t. We also defineda reject radiusthresholdfor hourofservice,wherethecostincurredbyfuelconsumption
+acustomerrequest.Specifically,ifthereisnovehiclewithina is subtracted from the revenue. Note that, the Q-values
+radiusof 5km to serve a request, it is rejected.This simulator dependonthepricingsincethedecisionsmadebycustomers
+hosts each deep reinforcementlearning agent which acts as a and drivers impact the reward function through the profit
+ridesharing vehicle that aims to maximize its reward: Eq. (6). term. With high net profits, our framework is able to find a
+common ground that is profitable to both parties.
+B. DQN Training and Testing • Travel Distance: this metric shows the number of kilo-
+meters traveled by each vehicle per hour of service, which
+The fleet of autonomous vehicles was trained in a virtual
+gives a good reflection of the cost incurred by vehicles due
+environmentthatsimulatesurbantraffic.We considerthe data
+to serving multiple ride requests.
+of June 2016 for training and one week from July 2016 for
+evaluations.For each experiment,we trained our DQN neural
+networksusing the data fromthe monthof June 2016for 20k D. Baselines
+epochs, which correspondsto a total of 14 days, and used the We compare our proposed framework (with dispatching,
+most recent 5000 experiencesas a replay memory. In Appen- ride-sharing, our novel DPRS pricing strategy, and DARM
+dix D-C, Fig. 6 shows the convergence of average Q-max approach for matching and route planning) against the fol-
+during training. Upon saving Q-network weights, we retrieve lowing baselines to emphasize the distinct impact of each
+the weights to run testing on an additional 8 days from component:
+the month of July which corresponds to 10k epochs. Thus,
+• NoDispatch,NoRide-sharing,NoPricingStrategy,Greedy
+T = 8 × 24 × 60 steps, wheret = 1 minute. Also, we use
+Matching (!D, !RS, !PS, GM): In this setting, vehicles
+Python and Tensorflow to implement our framework. Each
+don’tget dispatchedto areas with anticipatedhigh demand,
+vehicle has a maximum working time of 21 hours per day,
+nomatterhowlongtheystay idle.Ride-sharing(pooling)is
+after which it exits the market. To initialize the environment,
+notallowed,everyvehicleservesonlyonerequestatatime.
+we run the simulation for 20 minutes without dispatching the
+Also, initial pricing is used and is accepted by both drivers
+vehicles. Finally, we set β = 10,β = 1,β = 5, β = 12,
+1 2 3 4 and customers by default. For matching, only the greedy
+β =8, λ=10%, ω4 =15,ω5 =1, and ω6 =4.
+5 initial matching is applied, no optimization takes place.
+• No Dispatch with Ride-sharing but No Pricing Strategy,
+C. Performance Metrics and with Greedy Matching (!D, RS, !PS, GM): similar to
+We breakdown the reward and utility functions, and inves- (!D,!RS,!PS) exceptthatride-sharing(pooling)isallowed,
+tigate the performance for various baselines. Recall that we where vehicles can serve more than one request altogether.
+want to minimize the components of our reward in Eq. (6). • DispatchwithNoRide-sharingandNoPricingStrategywith
+• Accept rate: we note that the supply-demandmismatch is Greedy Matching (D, !RS, !PS, GM): Here, vehicles are
+reflected in our simulation through this metric. Accept rate dispatched when idle but, ridesharing isn’t allowed as [32].
+is defined as the ratio of successful pick-ups by the fleet • DispatchwithRidesharingbutNoPricingStrategy,andwith
+to the total number of requests made in a given time slot. GreedyMatching(D,RS,!PS,GM):similarto(D,!RS,!PS,
+A high accept rate is a characteristic of a reliable mode of GM), but with ride-sharing allowed, as in DeepPool [29].
+transportation.With a high acceptancerate, our fleet is able • Dispatch with Ridesharing and Pricing Strategy, but with
+to fulfill the passengers’ transportation demands. GreedyMatching (D, RS, PS, GM): similar to (D, RS, !PS,
+• Cruising (idle) time: this metric represents the time at GM), but with applying our DPRS pricing strategy where
+which a vehicle is neither occupied nor gaining profit but customers and drivers are involved in the decision-making
+still incurring gasoline cost. process. However, only greedy matching is adopted here.
+• OccupancyRate: thismetriccapturestheutilizationrateof The proposed baselines aim to evaluate the effectiveness of
+thefleetofvehicles,itkeepstrackofhowmanyvehiclesare eachcomponentofourframework.Ourproposedjointmethod
+deployedfromthefleettoservethedemand.Byminimizing incorporates both insertion-based route-planning and pricing
+the number of occupied vehicles, we achieve better utiliza- strategytoinvolvebothcustomersanddriversin thedecision-
+tionofindividualvehiclesinservingthedemand.Giventhat making. As compared to the above baselines that don’t adopt
+(i) all baselines are catering to a similar volume of pickup DARM, we hypothesize that our (DARM+DPRS) would be
+Authorized licensed use limited to: Amrita School of Engineering. Downloaded on April 07,2026 at 15:37:29 UTC from IEEE Xplore. Restrictions apply.
+HALIEMetal.: DISTRIBUTEDMODEL-FREERIDE-SHARINGAPPROACH 7939
+Fig.2. Performance metricsoftheproposedalgorithm andthebaselines.3
+a more effective approach. Given that the core intuition of to the deploymentof the other componentsof our framework
+DARMistogrouptogetherridesthatsharerouteintersections (Dispatching Policy, DPRS and DARM). Note that DARM
+to their destinations as opposed to rides heading to opposite- works in tandem with DPRS, as the pricing decisions impact
+direction-destinations,weexpectimprovementsinthe number therouteplanningprocedure(i.e.pricing-basedmatching)and
+of rides served, profits, travel distance, and occupancy rate. thus the improvement of profits, waiting times, idle times as
+Moreover, we have included baselines that do not consider wellastraveldistanceisaresultofdeployingbothapproaches.
+DPRS, wherePricingStrategyis notadopted(!PS) toobserve
+the effectiveness of our pricing framework. In these scenar- E. Results Discussion
+ios, involving drivers and customers in the decision-making We validate the necessity of each component of our
+process has the potential to burden the system causing an framework using computational results. From our simulation,
+increase in the rejection rate and the number of vehicles we observe that the hypothesis for each baseline comparison
+utilized to serve the demand. However, we hypothesize that has been supported for the most part by our experimental
+our DPRS together with our dispatch policy will be able to results. In Fig. 2, we investigate the overall performance of
+establish the balance and reach solutions that are profitable our proposed framework in comparison to all other baselines.
+to both passengers and drivers. To validate our hypothesis, We show the actual number of requests as the dotted pink
+we investigate both the net profits of drivers as well as line. We observe that our joint DARM + DPRS framework
+the passengers’ waiting times. In addition, as compared to rankshighestin the acceptancerate perhour(almostcoincide
+DPRS only baseline (D, RS, PS, GM), our joint framework with the actual requests curve) of > 96%, followed by all
+(DARM + DPRS) is expected to further improve the fleet the ridesharing-based baselines (at around 80%), while the
+utilization, idle time and overall travel distance. In addition, non-ridesharing and the non-dispatching baselines come at
+we also include baselines that don’t adopt dispatching policy the bottom of the list (with < 55%). Clearly, our joint
+wherevehiclesonlymobilizeaccordingtothepickuplocations (DARM+DPRS) approach boosts the acceptance rate with
+of their requests as opposed to learning the supply-demand an increase of > 15% when compared to DPRS only
+distribution of the city and mobilizing accordingly when they [(D RS PS GM) baseline] and DeepPool [(D RS !PS GM)
+experience idle time. Comparing against this baseline shows baseline] and > 40% when compared to non-dispatching
+the impact of our dispatch policy on improving profits, fleet and/or non-ridesharing baselines. This proves our hypothe-
+utilization, accept rate, travel distance, and waiting times. sis that this improvement of 40% is achieved by our joint
+Finally, since [29] showed that (D, RS, PS, GM) performs (DARM+DPRS),while15%isfullyattributedtoourDARM
+better than the dispatch with minimum distance (DS-mRS) approach (which makes use of DPRS in its optimization
+approach [20] and the Centralized Receding Horizon Con- phase).
+trol (cRHC) approach [41] in terms of idle times, waiting Contradictory to the expectation that involving drivers and
+timesand fleetutilization,we do notconsiderthese baselines. customers in the decision-making process would increase the
+In (DS-mRS), ride-sharing is allowed where two riders are rejection rate and the number of vehicles utilized to serve
+assigned to one vehicle so that the total driving distance is the demand, our joint (DARM+DPRS) has significantly low
+minimized. However,in cRHC, the dispatch actions are taken rejection rate. To further analyze the rejection rate due to
+to maximize the expected reward in a centralized manner as DPRS, we observe that the rejection rate made by customers
+opposed to our distributed approach. (i.e., when a customer weighs in and rejects a ride) is fairly
+We includebaselinesthatdon’tadoptridesharingto bench- closetothenaturallyencounteredrejectionratethatoccursdue
+mark how much of the improvement in the aforementioned to the unavailability of vehicles within the request’s vicinity.
+performance metrics is attributed to ride pooling instead of Itisworthnotingthattheproposedmethodisabletodeliver
+servingonerideatatime,asopposedtotheimprovementdue more requests while minimizing the number of occupied
+vehicles. Fig. 2 shows a utilization/occupancy rate of around
+3EnlargedFigureisprovidedinFig.8inAppendixD. two-thirdsof thatofthe restofthe baselines,saving one-third
+Authorized licensed use limited to: Amrita School of Engineering. Downloaded on April 07,2026 at 15:37:29 UTC from IEEE Xplore. Restrictions apply.
+7940 IEEETRANSACTIONSONINTELLIGENTTRANSPORTATIONSYSTEMS,VOL.22,NO.12,DECEMBER2021
+Fig.3. Histogramsofperformance metrics fortheproposedalgorithm andthebaselines.4
+ofthevehiclesforservingnewincomingrequestswhichwould tifying the individual drivers’ preferred zones based on the
+-inturn-furtherincreasetheacceptancerate.Also,wehadset learnt reward using DQN, could guarantee them a significant
+the maximum number of vehicles in our simulator to 8000, improvement in earnings that, in turn, helped make up for
+our approach utilizes only half of them (4000) to serve the any extra encountered cost. This implies both the drivers and
+demand with an acceptance rate > 96% With the DPRS customers are achieving a compromise that is profitable and
+only [(D RS PS GM) baseline] and DeepPool [(D RS !PS convenientto them. Specifically, the profits for our DARM +
+GM) baseline], this increases to just below 5000 vehicles. DPRS frameworkis almostdoublethatofDPRS only[(DRS
+Again, an improvement of 1000 vehicles, only attributed to PS GM) baseline], and 3−4 times that of DeepPool [(D RS
+adoptingourDARMapproach.Withoutourdispatchingpolicy, !PS GM) baseline]. Without ride-sharing, profits are 10 times
+the numberof occupied vehicles reaches more than 6000 that less than the average profit with our joint framework.
+onlycovered60%ofthedemand.While,asexpected,without We willfurthershowthatourframeworknotonlyenhances
+ridesharing,morethan7500vehiclesareutilizedtoserveonly the overall fleet utilization, but also the utilization of each
+60% of the demand. Since our DARM + DPRS performs individual vehicle (i.e., percentage of time the vehicle is
+significantly better than DeepPoolin both metrics;this makes occupied). Similarly, for the travel distance metric. Fig. 3a
+DARM + DPRS superior to DeepPool, DS-mRS, and cRHC shows that our joint framework minimizes the cruising time,
+baselines. where vehicles are idle, and thus minimizes the extra travel
+We can further support our hypothesis by looking at the distance as well as extra gasoline cost. On average, vehicles’
+average travel distance of the fleet, we can see it is exploding idletimeiswithinaminimalrange(1−2)hoursforDARM+
+(around 1300km) with the non-dispatching non-ridesharing DPRS framework. Knowing that vehicles’ working time is at
+baseline, where the vehicle only serves one request at a time most21hoursperday,weobservethat>85%oftheallowed
+and is at the risk of encountering large cruising time while vehicles per day, experience idle time < 2 hours, which is
+looking for a ride, without taking the right dispatch action < 10% of their total working time. This metric is almost
+to a zone where new requests can be found. Just by adding doubled for all other three baselines. This proves that most
+ridesharing, travel distance dramatically decreases to around of the improvement in fleet utilization is due to our DARM
+500km [(!DSRS!PSGM)baseline]saving>60%,butinthis framework.Thisisalsoreflectedintheoccupancyratemetric,
+case,theacceptrateisonly55%.However,whenadoptingour which is defined as the percentageof time where vehicles are
+dispatch policy [(DS RS !PS GM) baseline], travel distance occupied while on duty. Fig. 3a shows that 6k−8k vehicles
+reaches 700km saving > 50%, while serving 80% of the are between 80%− 100% occupied, and hence proves that
+demand.Finally,withjoint(DARM+DPRS),theoveralltravel our framework significantly improves the utilization of each
+distance falls at 300km, saving >80% while serving ≈96% individual vehicle as well as the whole fleet.
+ofthedemand.Therefore,a30%decreaseintheoveralltravel However, Fig. 3 shows that the average travel distance
+distance is attributed to our DARM+DPRS framework. of DARM + DPRS is slightly higher, ranging between
+Clearly,non-dispatchingandnon-ridesharingalgorithmsare 10−30 km per hour, compared to 5 − 25 km for the
+shown to have poor utilization of resources, as they use a other baselines. Most of the 4000 vehicles deployed by
+highernumberofvehiclestoservethelessamountofdemand. (DARM+DPRS) fall within 10−20 km which is very rea-
+Therefore, we exclude them due to their poor performance sonable given the 15 − 40% extra demand that they serve.
+in Fig. 2., and we take a closer look at the ride-sharingbased Since DARM + DPRS provides significantly higher profits
+baselinesthatadopta dispatchpolicy.Figure3 showsthatthe for drivers, it comes at the cost of a slight increase in
+averageprofitsforthedrivershavesignificantlyincreasedover travel distance, which is an advantage of DARM + DPRS.
+time as compared to the other three protocols. Thus, quan- Note that, the two policies with the lowest travel distance
+in Fig 3c, and 3d are not involving vehicles or customers in
+4EnlargedfigureisprovidedinFig.9inAppendixD. thedecision-makingprocesswhichexplainswhyvehicleshave
+Authorized licensed use limited to: Amrita School of Engineering. Downloaded on April 07,2026 at 15:37:29 UTC from IEEE Xplore. Restrictions apply.
+HALIEMetal.: DISTRIBUTEDMODEL-FREERIDE-SHARINGAPPROACH 7941
+lower travel distances on average. However, we can observe different objectives [42] is left as future work. Additional
+that the non-ridesharing protocols are not efficient as they futuredirectionsofextendingthisworkare:includingcapabil-
+result in lower profit margins and higher customers’ waiting ities of a jointdeliverysystem for passengersand goodsas in
+time. Moreover,we emphasize that non-dispatchingprotocols [43] (considered in part in [44]), or using multi-hop routing
+yield higher idle time for the vehicles as they might spend a of passengers as in [45] and transit services as in [33] for
+largeamountof time beingidleand theynevergetdispatched efficient fleet utilization.
+tohigherdemandareas.Incontrast,non-ride-sharingprotocols
+yield lower idle time, but they are still inefficient as vehicles
+REFERENCES
+spend more time on duty while serving a lower number of
+customers than the ride-sharing protocols. [1] M. Haliem, G. Mani, V. Aggarwal, and B. Bhargava, “A distributed
+model-freeride-sharingalgorithmwithpricingusingdeepreinforcement
+Compared to both DeepPool [(D RS !PS GM) baseline]
+learning,” inProc.Comput.Sci.CarsSymp.,Dec.2020,pp.1–10.
+and DPRS only [(D RS PS GM) baseline], the waiting [2] J.Alonso-Mora, S.Samaranayake, A.Wallar, E.Frazzoli, andD.Rus,
+time per request is significantly lower for DARM + DPRS “On-demandhigh-capacityride-sharingviadynamictrip-vehicleassign-
+ment,” Proc. Nat. Acad. Sci. USA, vol. 114, no. 3, pp.462–467,
+approach.As shown in Fig. 3, the waiting time for customers
+Jan.2017.
+reduces overtime to < 1 minute. On average, the response [3] M. Iqbal. (2020). Uber revenue and usage statistics. BusinessO-
+time (time till customer is picked up) of our framework is fApps. [Online]. Available: https://www.businessofapps.com/data/uber-
+< 200 sec (≈ 3 minutes), which is almost half that of the statistics/

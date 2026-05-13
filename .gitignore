@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.DS_Store
+.env
+saved_models/
+outputs/
+*.pdf
+*.pt
+*.zip
+*.csv
+archive/

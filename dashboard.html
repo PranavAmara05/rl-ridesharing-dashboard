@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DARM+DPRS+DQN — Training Dashboard</title>
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <h1>🚕 DARM+DPRS+DQN</h1>
+    <div class="tab-bar">
+      <div class="tab active" data-tab="train"><span class="icon">🎯</span>Train</div>
+      <div class="tab" data-tab="sim"><span class="icon">🏙️</span>Simulate</div>
+      <div class="tab" data-tab="models"><span class="icon">💾</span>Models</div>
+      <div class="tab" data-tab="compare"><span class="icon">📊</span>Compare</div>
+    </div>
+    <div id="status-pill" class="status-idle"><span class="dot"></span>IDLE</div>
+  </div>
+
+  <div id="main">
+    <!-- ══════════ TRAIN ══════════ -->
+    <div class="page active" id="p-train">
+      <div id="train-sidebar">
+        <div class="card"><div class="card-h"><span class="dot" style="background:#818cf8"></span>Algorithm</div><div class="card-b">
+          <div class="fg"><label>Pipeline Mode</label>
+            <select id="cfg-algo">
+              <option value="full">Full (D+RS+PS+DARM+DQN)</option>
+              <option value="dqn_only">DQN Dispatch Only</option>
+              <option value="no_pricing">Without DPRS Pricing</option>
+              <option value="no_rideshare">Without Ridesharing</option>
+              <option value="greedy">Greedy Matching (No DARM)</option>
+            </select></div>
+        </div></div>
+        <div class="card"><div class="card-h"><span class="dot" style="background:var(--a2)"></span>DQN Hyperparams</div><div class="card-b">
+          <div class="fg"><label>Learning Rate</label><div class="row"><input type="range" id="cfg-lr" min="-5" max="-2" step="0.1" value="-3.3"><span class="val" id="v-lr"></span></div></div>
+          <div class="fg"><label>Gamma</label><div class="row"><input type="range" id="cfg-gamma" min="0.9" max="0.999" step="0.001" value="0.95"><span class="val" id="v-gamma"></span></div></div>
+          <div class="fg"><label>ε Start</label><div class="row"><input type="range" id="cfg-eps-start" min="0.1" max="1.0" step="0.05" value="1.0"><span class="val" id="v-eps-start"></span></div></div>
+          <div class="fg"><label>ε End</label><div class="row"><input type="range" id="cfg-eps-end" min="0.01" max="0.3" step="0.01" value="0.05"><span class="val" id="v-eps-end"></span></div></div>
+          <div class="fg"><label>ε Decay</label><div class="row"><input type="range" id="cfg-eps-decay" min="1000" max="20000" step="500" value="5000"><span class="val" id="v-eps-decay"></span></div></div>
+          <div class="fg"><label>Batch</label><div class="row"><input type="range" id="cfg-batch" min="16" max="256" step="16" value="64"><span class="val" id="v-batch"></span></div></div>
+          <div class="fg"><label>Replay Buffer</label><div class="row"><input type="range" id="cfg-replay" min="1000" max="20000" step="1000" value="5000"><span class="val" id="v-replay"></span></div></div>
+        </div></div>
+        <div class="card"><div class="card-h"><span class="dot" style="background:var(--a3)"></span>Reward Weights</div><div class="card-b">
+          <div class="fg"><label>B1 Profit</label><div class="row"><input type="range" id="cfg-b1" min="0" max="20" step="1" value="10"><span class="val" id="v-b1"></span></div></div>
+          <div class="fg"><label>B2 Wait</label><div class="row"><input type="range" id="cfg-b2" min="-10" max="0" step="0.5" value="-1"><span class="val" id="v-b2"></span></div></div>
+          <div class="fg"><label>B3 Fuel</label><div class="row"><input type="range" id="cfg-b3" min="-10" max="0" step="0.5" value="-5"><span class="val" id="v-b3"></span></div></div>
+          <div class="fg"><label>B4 Demand</label><div class="row"><input type="range" id="cfg-b4" min="0" max="20" step="1" value="12"><span class="val" id="v-b4"></span></div></div>
+          <div class="fg"><label>B5 Supply</label><div class="row"><input type="range" id="cfg-b5" min="-15" max="0" step="1" value="-8"><span class="val" id="v-b5"></span></div></div>
+        </div></div>
+        <div class="card"><div class="card-h"><span class="dot" style="background:var(--a5)"></span>Environment</div><div class="card-b">
+          <div class="fg"><label>Fleet Size</label><div class="row"><input type="range" id="cfg-fleet" min="50" max="500" step="10" value="150"><span class="val" id="v-fleet"></span></div></div>
+          <div class="fg"><label>Warmup</label><div class="row"><input type="range" id="cfg-warmup" min="0" max="50" step="5" value="20"><span class="val" id="v-warmup"></span></div></div>
+          <div class="fg"><label>Enable OSRM routing</label><div class="row"><input type="checkbox" id="cfg-osrm"></div></div>
+          <div class="fg"><label>OSRM base URL</label><input type="text" id="cfg-osrm-url" value="http://router.project-osrm.org"></div>
+          <div class="fg"><label>OSRM profile</label><input type="text" id="cfg-osrm-profile" value="driving"></div>
+          <div class="fg"><label>Enable congestion</label><div class="row"><input type="checkbox" id="cfg-congestion"></div></div>
+          <div class="fg"><label>Use time features</label><div class="row"><input type="checkbox" id="cfg-use-time-features"></div></div>
+          <div class="fg"><label>Enable rider changes</label><div class="row"><input type="checkbox" id="cfg-rchange-enable"></div></div>
+          <div class="fg"><label>Rider Change %</label><div class="row"><input type="range" id="cfg-rchange" min="0" max="0.15" step="0.01" value="0.00"><span class="val" id="v-rchange"></span></div></div>
+        </div></div>
+        <div class="card"><div class="card-h"><span class="dot" style="background:#38bdf8"></span>Dataset</div><div class="card-b">
+          <div class="fg"><label>Use NYC dataset</label><div class="row"><input type="checkbox" id="cfg-dataset" checked></div></div>
+          <div class="fg"><label>Dataset path (optional)</label><input type="text" id="cfg-dataset-path" placeholder="auto (kagglehub)"></div>
+          <div class="fg"><label>Dataset max files</label><input type="number" id="cfg-dataset-files" value="1" min="1" max="24"></div>
+          <div class="fg"><label>Dataset max rows</label><input type="number" id="cfg-dataset-rows" value="100000" min="10000" step="10000"></div>
+          <div class="fg"><label>Dataset demand scale</label><input type="number" id="cfg-dataset-scale" value="0.1" step="0.1" min="0"></div>
+          <div style="font-size:10px;color:var(--t3);line-height:1.4;margin-top:4px">Use the dataset controls here to switch between KaggleHub, a local dataset folder, or synthetic fallback.</div>
+        </div></div>
+        <div class="card"><div class="card-h"><span class="dot" style="background:#22c55e"></span>Evaluation</div><div class="card-b">
+          <div class="fg"><label>Eval interval</label><input type="number" id="cfg-eval-interval" value="200" min="0" step="50"></div>
+          <div class="fg"><label>Eval steps</label><input type="number" id="cfg-eval-steps" value="100" min="0" step="10"></div>
+          <div class="fg"><label>Eval seed</label><input type="number" id="cfg-eval-seed" value="123" min="0" step="1"></div>
+        </div></div>
+      </div>
+
+      <div id="train-main">
+        <!-- Controls + Save always visible at top -->
+        <div class="card"><div class="card-b" style="padding:8px 12px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <div class="fg" style="margin:0;width:120px"><label>Steps</label><input type="number" id="cfg-steps" value="1000" min="10" max="100000"></div>
+            <button class="btn btn-primary" id="btn-train">▶ Start</button>
+            <button class="btn" id="btn-pause" disabled>⏸ Pause</button>
+            <button class="btn btn-danger btn-sm" id="btn-stop" disabled>⏹ Stop</button>
+            <div style="border-left:1px solid var(--bd2);height:24px;margin:0 4px"></div>
+            <input type="text" id="save-name" placeholder="Model name..." style="width:140px;font-size:10px;padding:5px 8px">
+            <button class="btn btn-success btn-sm" id="btn-save">💾 Save</button>
+          </div>
+          <div class="prog-bar"><div class="prog-fill" id="prog-fill" style="width:0"></div></div>
+          <div class="prog-text"><span id="prog-step">Step 0 / 0</span><span id="prog-phase">Ready</span></div>
+        </div></div>
+
+        <!-- Metrics -->
+        <div class="met-grid">
+          <div class="met"><div class="ml">Accept Rate</div><div class="mv" id="m-ar" style="color:var(--a2)">—</div><div class="ms">&gt;96%</div></div>
+          <div class="met"><div class="ml">Profit</div><div class="mv" id="m-profit" style="color:var(--a6)">—</div><div class="ms">$/step</div></div>
+          <div class="met"><div class="ml">Wait</div><div class="mv" id="m-wait" style="color:var(--a5)">—</div><div class="ms">min</div></div>
+          <div class="met"><div class="ml">Occupancy</div><div class="mv" id="m-occ" style="color:#22c55e">—</div><div class="ms">%</div></div>
+          <div class="met"><div class="ml">Cruising</div><div class="mv" id="m-idle" style="color:#f59e0b">—</div><div class="ms">idle %</div></div>
+          <div class="met"><div class="ml">Distance</div><div class="mv" id="m-km" style="color:#60a5fa">—</div><div class="ms">km</div></div>
+          <div class="met"><div class="ml">Loss</div><div class="mv" id="m-loss" style="color:var(--a3)">—</div><div class="ms">↓</div></div>
+          <div class="met"><div class="ml">Epsilon</div><div class="mv" id="m-eps" style="color:var(--a4)">—</div><div class="ms">ε</div></div>
+          <div class="met"><div class="ml">Q-Max</div><div class="mv" id="m-qmax" style="color:#818cf8">—</div><div class="ms">conv.</div></div>
+        </div>
+
+        <!-- Charts -->
+        <div class="chart-grid">
+          <div class="chart-card"><div class="chart-label">Accept Rate</div><div class="chart-wrap"><canvas id="ch-ar"></canvas></div></div>
+          <div class="chart-card"><div class="chart-label">Profit ($)</div><div class="chart-wrap"><canvas id="ch-profit"></canvas></div></div>
+          <div class="chart-card"><div class="chart-label">Wait (min)</div><div class="chart-wrap"><canvas id="ch-wait"></canvas></div></div>
+          <div class="chart-card"><div class="chart-label">DQN Loss</div><div class="chart-wrap"><canvas id="ch-loss"></canvas></div></div>
+          <div class="chart-card"><div class="chart-label">Epsilon</div><div class="chart-wrap"><canvas id="ch-eps"></canvas></div></div>
+          <div class="chart-card"><div class="chart-label">Q-Max</div><div class="chart-wrap"><canvas id="ch-qmax"></canvas></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ SIMULATE ══════════ -->
+    <div class="page" id="p-sim">
+      <div id="sim-canvas-wrap" style="position:relative">
+        <canvas id="city" width="600" height="600"></canvas>
+        <div id="sim-tip" style="position:absolute;display:none;background:rgba(15,23,42,0.9);color:#fff;font-size:10px;padding:4px 8px;border-radius:4px;pointer-events:none;z-index:10;border:1px solid var(--bd2);white-space:nowrap;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1)"></div>
+        <div id="sim-overlay" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);border-radius:var(--r)">
+          <div style="text-align:center;color:var(--t2)"><div style="font-size:40px;margin-bottom:8px">🏙️</div><div style="font-size:13px;font-weight:600">City Grid Simulation</div><div style="font-size:10px;color:var(--t3)">Load a model or train first, then Run Demo</div></div>
+        </div>
+      </div>
+      <div id="sim-sidebar">
+        <div class="card"><div class="card-h"><span class="dot" style="background:var(--a2)"></span>Controls</div><div class="card-b">
+          <div class="fg"><label>Demo Steps</label><input type="number" id="sim-steps" value="200" min="10" max="5000"></div>
+          <div class="btn-row"><button class="btn btn-primary" id="btn-sim-run">▶ Run Demo</button><button class="btn btn-danger btn-sm" id="btn-sim-stop" disabled>⏹ Stop</button></div>
+          <div class="prog-bar"><div class="prog-fill" id="sim-prog" style="width:0"></div></div>
+          <div class="prog-text"><span id="sim-step-text">Ready</span></div>
+        </div></div>
+        <div class="card"><div class="card-h"><span class="dot" style="background:var(--a5)"></span>Fleet</div><div class="card-b" id="sim-fleet"><div style="color:var(--t3);font-size:10px">No simulation</div></div></div>
+        <div class="card"><div class="card-h"><span class="dot" style="background:var(--a3)"></span>Metrics</div><div class="card-b">
+          <div class="mc-stats"><div class="mc-stat"><div class="mc-l">AR</div><div class="mc-v" id="sm-ar">—</div></div><div class="mc-stat"><div class="mc-l">$</div><div class="mc-v" id="sm-profit">—</div></div><div class="mc-stat"><div class="mc-l">Wait</div><div class="mc-v" id="sm-wait">—</div></div><div class="mc-stat"><div class="mc-l">Occ</div><div class="mc-v" id="sm-occ">—</div></div><div class="mc-stat"><div class="mc-l">Idle</div><div class="mc-v" id="sm-idle">—</div></div><div class="mc-stat"><div class="mc-l">km</div><div class="mc-v" id="sm-km">—</div></div><div class="mc-stat"><div class="mc-l">Step</div><div class="mc-v" id="sm-trips">—</div></div></div>
+        </div></div>
+        <div class="card"><div class="card-h"><span class="dot" style="background:#818cf8">Q-Value Heatmap</div><div class="card-b">
+          <canvas id="sim-hm" style="width:100%;height:80px;border-radius:4px;background:#0f172a"></canvas>
+          <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--t3);margin-top:4px"><span>Low</span><span>High</span></div>
+        </div></div>
+        <div class="card"><div class="card-h"><span class="dot" style="background:var(--a6)"></span>Log</div><div class="card-b"><div id="sim-log" style="max-height:200px;overflow-y:auto;font-size:9px;font-family:monospace;color:var(--t2)">Waiting...</div></div></div>
+      </div>
+    </div>
+
+    <!-- ══════════ MODELS ══════════ -->
+    <div class="page" id="p-models">
+      <div style="width:100%">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <h2 style="font-size:15px;font-weight:700">Saved Models</h2>
+          <button class="btn btn-sm" id="btn-refresh-models">↻ Refresh</button>
+          <span style="margin-left:auto;font-size:10px;color:var(--t3)" id="model-count">0 models</span>
+        </div>
+        <div class="model-grid" id="model-list">
+          <div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">💾</div><div class="empty-text">No saved models yet</div><div class="empty-sub">Train a model → Save it → It appears here</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ COMPARE ══════════ -->
+    <div class="page" id="p-compare">
+      <div style="width:100%">
+        <div class="cmp-header">
+          <h2 style="font-size:15px;font-weight:700">Compare Models</h2>
+          <div class="fg" style="margin:0;min-width:180px"><div class="row"><label style="margin:0;white-space:nowrap">Eval Steps</label><input type="range" id="cmp-steps" min="50" max="500" step="50" value="100"><span class="val" id="v-cmp-steps"></span></div></div>
+          <button class="btn btn-primary btn-sm" id="btn-run-compare" disabled>🔬 Run Comparison</button>
+          <span style="font-size:10px;color:var(--t3)" id="cmp-sel-count">Select 2+ models</span>
+        </div>
+        <div style="margin-bottom:10px">
+          <div style="font-size:9px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Click models to select (need ≥2)</div>
+          <div id="cmp-chips" class="cmp-model-chips"><div style="color:var(--t3);font-size:11px;padding:6px 0">No saved models — train and save some first</div></div>
+        </div>
+        <div id="compare-results" style="display:none">
+          <div class="card"><div class="card-h"><span class="dot" style="background:var(--a3)"></span>Results</div><div class="card-b">
+            <div class="compare-charts" id="compare-charts"></div>
+            <table class="compare-table" id="compare-table"><thead><tr><th>Model</th><th>Accept Rate</th><th>Profit ($)</th><th>Wait (min)</th><th>Occupancy</th><th>Cruising</th><th>Distance (km)</th><th>Steps</th></tr></thead><tbody id="cmp-tbody"></tbody></table>
+          </div></div>
+        </div>
+        <div class="card" style="margin-top:10px"><div class="card-h"><span class="dot" style="background:#f59e0b"></span>Ablation Study</div><div class="card-b">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <div class="fg" style="margin:0;width:120px"><label>Train steps</label><input type="number" id="cfg-ablation-train" value="300" min="10" step="10"></div>
+            <div class="fg" style="margin:0;width:120px"><label>Eval steps</label><input type="number" id="cfg-ablation-eval" value="150" min="10" step="10"></div>
+            <button class="btn btn-primary btn-sm" id="btn-run-ablation">⚗ Run Ablation</button>
+            <span style="font-size:10px;color:var(--t3)" id="ablation-status">Ready</span>
+          </div>
+          <div id="ablation-results" style="font-size:11px;color:var(--t2)"></div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>
