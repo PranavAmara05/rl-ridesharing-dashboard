@@ -322,9 +322,12 @@ $$Q(s,a) \leftarrow Q(s,a) + \alpha \left[ r + \gamma \cdot Q_{\text{target}}(s'
 ### 8.3 Demand Model
 
 - **NYC Yellow Taxi dataset** via KaggleHub (elemento/nyc-yellow-taxi-trip-data)
-- Requests are bucketed by minute-of-day; demand forecasts use per-minute historical counts
+  - **First run**: Downloads ~500MB dataset and caches locally
+  - **Subsequent runs**: Loads from `~/.cache/darm_dprs_dqn/` (instant, no re-download)
+  - Requests are bucketed by minute-of-day; demand forecasts use per-minute historical counts
 - **Synthetic fallback** when dataset is unavailable
 - 75% of riders are willing to share; 25% want private rides
+- Demand patterns reflect real NYC rush hours and time-of-day effects
 
 ### 8.4 Request Properties
 
@@ -350,17 +353,55 @@ Browser (dashboard.html) ←── SSE ──► API Server (api_server.py) ─�
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
+| `/` | GET | Serve dashboard.html (root path) |
+| `/api/config` | GET | Get parameter defaults and configuration |
 | `/api/train/start` | POST | Start training with config JSON |
-| `/api/train/pause` | POST | Toggle pause/resume |
-| `/api/train/stop` | POST | Stop training |
-| `/api/train/status` | GET | Current step, metrics, history |
-| `/api/stream` | GET (SSE) | Real-time metric updates |
-| `/api/models` | GET | List saved models |
-| `/api/models/save` | POST | Save current model |
+| `/api/train/status` | GET | Current step, metrics, training history |
+| `/api/train/pause` | POST | Toggle pause/resume training |
+| `/api/train/stop` | POST | Stop ongoing training |
+| `/api/stream` | GET (SSE) | Real-time metric updates during training |
+| `/api/sim/state` | GET | Current simulation state (vehicles, pending requests, heatmap) |
+| `/api/models` | GET | List all saved trained models |
+| `/api/models/save` | POST | Save current trained model with metadata |
 | `/api/models/load` | POST | Load model by ID |
-| `/api/models/{id}` | DELETE | Delete a model |
-| `/api/compare` | POST | Evaluate and compare models |
-| `/api/config` | GET | Current parameter defaults |
+| `/api/models/{id}` | DELETE | Delete a saved model |
+| `/api/compare` | POST | Evaluate and compare multiple models |
+| `/api/ablation` | POST | Run ablation study (component-level testing) |
+
+### 🏙️ Live Simulation Visualization (Enhanced)
+
+The Simulate tab features a **real-time city grid visualization** that clearly shows:
+
+#### Visual Elements
+
+| Element | Color | Meaning |
+|---------|-------|---------|
+| 🔵 Circle | Blue (#3b82f6) | Idle vehicle waiting for requests |
+| 🟢 Circle | Green (#10b981) | Vehicle carrying passengers |
+| 🟣 Circle | Purple (#8b5cf6) | Vehicle dispatching/repositioning |
+| 🟠 Circle | Amber (#f59e0b) | Vehicle en-route to pickup |
+| 🟢 Small diamond | Green | Pickup stop on route |
+| 🔴 Small diamond | Red | Dropoff stop on route |
+| 🔵 Small circle | Cyan | Pending ride request |
+| Orange gradient | Varies | Demand heatmap (high = bright) |
+| Grid lines | Slate | 15×15 zone boundaries |
+
+#### Key Features
+
+- **Responsive Canvas**: 750×600px with clear zone grid
+- **Passenger Count**: White number inside vehicle circle shows passenger load
+- **Route Visualization**: Lines show planned stops with pickup (green) and dropoff (red) markers
+- **Legend Panel**: Complete reference for all colors and symbols
+- **Live Status**: Real-time vehicle counts (Idle, Carrying, Dispatching, Pending)
+- **Metrics Display**: Accept rate, profit, wait time, occupancy, distance, steps
+
+#### Interpreting the Visualization
+
+1. **Orange background intensity** = demand concentration in that zone
+2. **Vehicle circles grow** as they pick up more passengers
+3. **Dispatch vehicles (purple)** move proactively to high-demand zones
+4. **Cyan pending requests** disappear when matched to vehicles
+5. **Zone grid** helps understand spatial distribution
 
 ### Performance Metrics (Evaluation)
 
@@ -520,37 +561,130 @@ new_rl/
 
 ## 14. How to Run
 
+### Quick Start (Recommended)
+
+The entire application runs through a **single unified dashboard** accessible via your browser:
+
+```bash
+python api_server.py 8000
+```
+
+Then open **http://localhost:8000/** in your browser.
+
+#### Example Workflow
+
+1. **Train a model**:
+   - Train Tab: Adjust sliders (e.g., LR=5e-4, Gamma=0.95, Fleet=150)
+   - Set steps: 500
+   - Click ▶ Start Training
+   - Watch metrics update in real-time
+   - Click Save when satisfied
+
+2. **Test your model**:
+   - Simulate Tab: Click ▶ Run Demo (200 steps)
+   - Watch live city grid visualization with color-coded vehicles
+   - Check legend and status panel for fleet health
+
+3. **Compare models**:
+   - Train a few more models with different parameters
+   - Compare Tab: Select models and view side-by-side performance
+   - Identify best configuration
+
+4. **Run ablation study** (optional):
+   - Ablation Tab: Test component contributions (DARM, DPRS, DQN)
+   - Understand which algorithms drive performance
+
 ### Prerequisites
 
 ```bash
 pip install torch numpy matplotlib tqdm kagglehub
 ```
 
-### Option 1: Interactive Dashboard (Recommended)
+### Features
+
+The interactive dashboard provides:
+
+#### 🚂 **Train Tab**
+- Adjust DQN parameters (learning rate, gamma, epsilon decay, batch size, replay buffer)
+- Configure reward weights (B1-B5)
+- Set environment parameters (fleet size, warmup steps, rider change probability)
+- Choose algorithm preset: Full | DQN Only | No Pricing | No Rideshare | Greedy
+- **Start/Pause/Stop** training with live metric streaming
+- Watch real-time training curves update as model learns
+- Save trained models for later comparison
+
+#### 🏙️ **Simulate Tab** (Newly Improved)
+- **Live City Grid Visualization**:
+  - 15×15 zone grid with **visible grid lines** for clarity
+  - **Color-coded vehicles**: 
+    - 🔵 Blue = Idle (waiting)
+    - 🟢 Green = Carrying passengers
+    - 🟣 Purple = Dispatching (repositioning)
+    - 🟠 Amber = Occupied (heading to pickup)
+  - **Orange heatmap background** shows demand intensity per zone
+  - **Pending requests** displayed as cyan circles
+  - **Route lines** showing pickup (🟢) and dropoff (🔴) stops
+  - **Passenger count** inside vehicle circles
+
+- **Comprehensive Legend & Status Panel**:
+  - Vehicle status explanations with color codes
+  - Stop marker types (Pickup/Dropoff)
+  - Real-time fleet counts (Idle, Carrying, Dispatching, Pending)
+  - Live metrics (Accept Rate, Profit, Wait Time, Occupancy, Idle %, km, steps)
+
+- **Run Demo**: Execute N simulation steps showing live vehicle movements and interactions
+
+#### 📊 **Models Tab**
+- List all saved trained models with metadata
+- View model config and final metrics
+- Load models for comparison or further training
+- Delete models to free space
+
+#### 🔬 **Compare Tab**
+- Select multiple models to compare side-by-side
+- View performance across metrics (AR, profit, wait, occupancy, etc.)
+- Visual comparison charts
+
+#### 🧪 **Ablation Study** (Advanced)
+- Test individual components independently
+- Measure contribution of DARM (matching), DPRS (pricing), DQN (dispatching)
+- Understand which components drive performance
+
+### Dataset Handling
+
+The system uses **smart dataset caching** for efficiency:
+
+- **First run**: Downloads NYC Yellow Taxi dataset from KaggleHub (~500MB)
+  - Shows message: *"Downloading NYC taxi dataset (this may take a moment)..."*
+  - Caches to: `~/.cache/darm_dprs_dqn/`
+  - Uses historical demand patterns for realistic simulation
+
+- **Subsequent runs**: 
+  - Instantly loads from cache
+  - No re-download, no network overhead
+  - Same realistic demand patterns
+
+- **Fallback**: If dataset unavailable, uses synthetic spatially-biased Poisson demand
+
+### Command-Line Options (API Server)
 
 ```bash
-python api_server.py 8000
-# Open http://localhost:8000/dashboard.html in your browser
+python api_server.py <port>
+# Example: python api_server.py 8000
 ```
 
-By default, the simulator tries to download the NYC dataset via KaggleHub. If it fails,
-it falls back to synthetic demand. Use `--no-dataset` to force synthetic demand or
-`--dataset-path` to point to a local dataset directory.
+The server serves:
+- **Static files**: dashboard.html, dashboard.css, dashboard.js
+- **REST API**: /api/train/*, /api/models/*, /api/compare, /api/ablation, /api/sim/state
+- **SSE stream**: /api/stream (real-time metric updates)
 
-Then use the UI to:
-1. Adjust parameters with sliders
-2. Set training steps → Click ▶ Start Training
-3. Watch live metrics update
-4. Save your model when done
-5. Train more models with different params
-6. Compare them in the Compare tab
-
-### Dashboard only
+### Option 2: Command-Line Interface (Legacy)
 
 ```bash
-python api_server.py 8000
-# Open http://localhost:8000/
+python ridesharing_darm_dprs_dqn.py
 ```
+
+This runs a full simulation with default parameters and saves results to `outputs/`. However, the **dashboard is the recommended interface** for full control and interactivity.
 
 ---
 

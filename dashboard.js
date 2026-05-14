@@ -22,7 +22,13 @@ document.querySelectorAll('.tab').forEach(tab => {
 
 // Simulation Constants & Helpers
 const GRID_SIZE = 15;
-const SIM_COLS = { idle: '#3b82f6', enroute: '#10b981', occupied: '#f59e0b', dispatching: '#8b5cf6' };
+const VEH_COLORS = { 
+  idle: '#3b82f6', 
+  enroute: '#f59e0b', 
+  occupied: '#f59e0b', 
+  dispatching: '#8b5cf6',
+  carrying: '#10b981'
+};
 
 function l2g(a) {
     const g = [];
@@ -230,6 +236,7 @@ function connectSSE() {
 function setPill(t,c){const p=document.getElementById('status-pill');p.className='status-'+c;p.innerHTML=`<span class="dot"></span>${t}`;}
 
 function onUpdate(d) {
+  if(d.model_id)document.getElementById('sim-model-pill').textContent=d.model_id;
   if(d.running&&!d.paused)setPill('TRAINING','training');
   else if(d.paused)setPill('PAUSED','paused');
   else if(d.phase==='done')setPill('DONE','done');
@@ -441,6 +448,10 @@ document.getElementById('btn-sim-run').onclick = async () => {
   simRunning = true;
   document.getElementById('sim-log').innerHTML = '<div style="color:var(--a2)">▶ Starting simulation...</div>';
 
+  // Update model pill to show "Training/New" since we're starting fresh training
+  document.getElementById('sim-model-pill').textContent = '⚙️ Training (New)';
+  document.getElementById('sim-model-pill').style.background = 'linear-gradient(135deg,#f59e0b,#ea580c)';
+
   // First stop any leftover training
   await api('/api/train/stop', 'POST');
   // Small delay to let server reset
@@ -453,6 +464,8 @@ document.getElementById('btn-sim-run').onclick = async () => {
     document.getElementById('btn-sim-run').disabled = false;
     document.getElementById('btn-sim-stop').disabled = true;
     simRunning = false;
+    document.getElementById('sim-model-pill').textContent = 'No model active';
+    document.getElementById('sim-model-pill').style.background = 'linear-gradient(135deg,var(--a3),var(--a2))';
     return;
   }
   document.getElementById('sim-log').innerHTML = '<div style="color:var(--a2)">▶ Simulation running...</div>';
@@ -492,35 +505,44 @@ document.getElementById('btn-sim-run').onclick = async () => {
       drawHeatmap(simState);
     }
 
+    // Update canvas/grid info
+    if (simState) {
+      tx('sim-time-info', `t=${simState.t || 0}`);
+      tx('sim-vehicle-count', `${(simState.vehicles || []).length} vehicles`);
+    }
+
     // Fleet status panel
     if (simState && simState.vehicles) {
       const vehs = simState.vehicles;
       const idle = vehs.filter(v => v.status === 'idle').length;
       const carrying = vehs.filter(v => (v.passengers || 0) > 0).length;
       const dispatching = vehs.filter(v => v.status === 'dispatching').length;
-      const enroute = vehs.filter(v => v.status === 'enroute').length;
-      const totals = simState.totals || {};
-      document.getElementById('sim-fleet').innerHTML = `
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:10px">
-          <div><span style="color:${VEH_COLORS.idle}">⬤</span> Idle: ${idle}</div>
-          <div><span style="color:${VEH_COLORS.carrying}">⬤</span> Carrying: ${carrying}</div>
-          <div><span style="color:${VEH_COLORS.dispatching}">⬤</span> Dispatch: ${dispatching}</div>
-          <div><span style="color:#818cf8">⬤</span> Enroute: ${enroute}</div>
-          <div>📦 Pending: ${(simState.pending || []).length}</div>
-          <div>✅ Served: ${totals.served || 0}</div>
-        </div>`;
+      const pending = (simState.pending || []).length;
+      tx('sm-idle-count', idle);
+      tx('sm-carry-count', carrying);
+      tx('sm-dispatch-count', dispatching);
+      tx('sm-pending-count', pending);
     }
 
     // Event log
     if (simState && simState.events && simState.events.length) {
       const log = document.getElementById('sim-log');
-      const latest = simState.events.slice(-5).reverse();
+      const events = simState.events;
+      const latest = events.slice(-20).reverse(); // Show more history
       let html = '';
       for (const ev of latest) {
-        const color = ev.type === 'cancel' ? 'var(--a4)' : ev.type === 'pickup' ? 'var(--a2)' : ev.type === 'dropoff' ? '#818cf8' : 'var(--t2)';
-        html += `<div style="color:${color};border-bottom:1px solid var(--bd);padding:2px 0">t=${ev.t} ${ev.msg||ev.type}</div>`;
+        let color = 'var(--t2)';
+        if (ev.type === 'accept') color = 'var(--a2)';
+        else if (ev.type === 'reject') color = 'var(--a4)';
+        else if (ev.type === 'dqn') color = '#818cf8';
+        else if (ev.type === 'sys') color = 'var(--t3)';
+        else if (ev.type === 'cancel') color = 'var(--a4)';
+        else if (ev.type === 'pickup') color = 'var(--a2)';
+        else if (ev.type === 'dropoff') color = '#818cf8';
+        
+        html += `<div style="color:${color};border-bottom:1px solid var(--bd);padding:2px 0;font-size:9px">t=${ev.t} ${ev.msg || ev.type}</div>`;
       }
-      html += `<div style="color:var(--t3);padding:2px 0">Step ${st.step} · Total: ${simState.total_req||0} req</div>`;
+      html += `<div style="color:var(--a3);padding:2px 0;font-size:9px">Step ${st.step} · Total: ${simState.total_req||0} req</div>`;
       log.innerHTML = html;
     }
 
@@ -551,41 +573,48 @@ function drawCityGrid(simState) {
   const w = canvas.width, h = canvas.height;
   const cw = w / GRID_SIZE, ch = h / GRID_SIZE;
 
-  // 1. Demand Heatmap
+  // 1. Demand Heatmap background
   const dg = l2g(simState.demand);
   ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, 0, w, h);
+  
   for (let r = 0; r < GRID_SIZE; r++) {
     for (let c = 0; c < GRID_SIZE; c++) {
-      ctx.fillStyle = `rgba(245,158,11,${dg[r][c] * 0.35})`;
+      const intensity = dg[r][c] * 0.4;
+      ctx.fillStyle = `rgba(245,158,11,${intensity})`;
       ctx.fillRect(c * cw, r * ch, cw, ch);
     }
   }
 
-  // Grid lines
-  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-  ctx.lineWidth = 0.5;
+  // 2. Grid lines - darker and more visible
+  ctx.strokeStyle = 'rgba(148,163,184,0.15)';
+  ctx.lineWidth = 1;
   for (let i = 0; i <= GRID_SIZE; i++) {
     ctx.beginPath(); ctx.moveTo(i * cw, 0); ctx.lineTo(i * cw, h); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(0, i * ch); ctx.lineTo(w, i * ch); ctx.stroke();
   }
 
-  // Pending requests
+  // 3. Pending requests (cyan diamonds)
   const pn = simState.pending || [];
   for (const r of pn) {
     ctx.fillStyle = '#06b6d4';
-    ctx.beginPath(); ctx.arc((r.c + 0.5) * cw, (r.r + 0.5) * ch, 3, 0, Math.PI * 2);
+    ctx.beginPath(); ctx.arc((r.c + 0.5) * cw, (r.r + 0.5) * ch, 4, 0, Math.PI * 2);
     ctx.fill();
+    ctx.strokeStyle = '#0891b2';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
   }
 
-  // Vehicles
+  // 4. Vehicles
   const vs = simState.vehicles;
   for (const v of vs) {
     const vx = (v.c + 0.5) * cw, vy = (v.r + 0.5) * ch;
     
     // Route lines
     if (v.route && v.route.length > 0) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-      ctx.lineWidth = 0.8;
+      ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+      ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(vx, vy);
       for (const s of v.route) {
         ctx.lineTo((s.c + 0.5) * cw, (s.r + 0.5) * ch);
@@ -593,34 +622,38 @@ function drawCityGrid(simState) {
       ctx.stroke();
     }
 
-    const col = SIM_COLS[v.status] || '#3b82f6';
-    const px = v.pax;
-    const rd = 5 + px * 1.5;
+    const col = VEH_COLORS[v.status] || '#3b82f6';
+    const px = v.passengers || v.pax || 0;
+    const rd = 6 + px * 2;
     
-    ctx.shadowBlur = 8;
+    ctx.shadowBlur = 10;
     ctx.shadowColor = col;
     ctx.fillStyle = col;
     ctx.beginPath(); ctx.arc(vx, vy, rd, 0, Math.PI * 2); ctx.fill();
     ctx.shadowBlur = 0;
 
+    // Passenger count
     if (px > 0) {
       ctx.fillStyle = '#fff';
-      ctx.font = `bold ${Math.max(7, rd - 1)}px sans-serif`;
+      ctx.font = `bold ${Math.max(9, rd - 1)}px sans-serif`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(px, vx, vy);
     }
 
+    // Route stops
     if (v.route) {
       for (const s of v.route) {
         const sx = (s.c + 0.5) * cw, sy = (s.r + 0.5) * ch;
         ctx.fillStyle = s.type === 'pickup' ? '#10b981' : s.type === 'dropoff' ? '#ef4444' : '#8b5cf6';
-        ctx.beginPath(); ctx.arc(sx, sy, 2.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(sx, sy, 3, 0, Math.PI * 2); ctx.fill();
       }
     }
   }
-  ctx.fillStyle = '#64748b';
-  ctx.font = '10px sans-serif';
-  ctx.fillText(`t=${simState.t || 0}  ${GRID_SIZE}×${GRID_SIZE}  ${vs.length} vehicles`, 8, h - 6);
+  
+  // Legend text
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '11px sans-serif';
+  ctx.fillText(`t=${simState.t || 0}  ${GRID_SIZE}×${GRID_SIZE}  ${vs.length} vehicles`, 12, h - 8);
 }
 
 function drawHeatmap(simState) {

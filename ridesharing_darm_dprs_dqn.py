@@ -18,6 +18,8 @@ Requirements: numpy, matplotlib  (torch optional; kagglehub optional for dataset
 import math, random, time, collections, os, json, argparse, threading, queue, sys
 import csv
 import glob
+import shutil
+import pathlib
 import datetime as dt
 # Fix Windows console encoding for Unicode output
 if sys.stdout.encoding != 'utf-8':
@@ -75,16 +77,16 @@ ZONE_KM              = 0.8         # km per cell (calibrated for pricing equilib
 MAX_DISPATCH_CELLS   = 7           # ±7 cells → 15×15 action space
 ACTION_DIM           = (2*MAX_DISPATCH_CELLS+1)**2  # 225
 
-N_VEHICLES           = 150
+N_VEHICLES           = 50
 N_TYPES              = 3
 MAX_CAP              = [2, 4, 6]
 MILEAGE_L            = [35, 28, 22]   # km/litre
-BASE_FARE            = [2.0, 3.0, 5.0]
-RATE_KM              = [0.9, 1.2, 1.8]   # $/km  (ω1)
-RATE_WAIT            = [0.05, 0.08, 0.12]  # $/min  (ω3)
+BASE_FARE            = [5.0, 8.0, 12.0]
+RATE_KM              = [1.5, 2.0, 2.5]   # $/km  (ω1)
+RATE_WAIT            = [0.1, 0.15, 0.2]  # $/min  (ω3)
 PGAS                 = 1.5   # $/litre
 
-REJECT_RADIUS_KM     = 5.0         # max pickup distance (paper: 5 km)
+REJECT_RADIUS_KM     = 3.0         # max pickup distance (paper: 5 km)
 MAX_IDLE_MIN         = 10          # dispatch idle vehicles after this
 
 # Forecast horizon for supply/demand in DQN state (t:t+T)
@@ -402,14 +404,44 @@ def _find_dataset_files(root_dir, max_files=1):
     return csv_files
 
 def _download_dataset_kagglehub():
+    """Download NYC taxi dataset from KaggleHub with local caching."""
+    
+    # Use ~/.cache/darm_dprs_dqn/ as the cache directory
+    cache_dir = pathlib.Path.home() / '.cache' / 'darm_dprs_dqn'
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_marker = cache_dir / 'dataset_cached.txt'
+    
+    # Check if we already have the dataset cached
+    if cache_marker.exists():
+        cached_path = str(cache_dir)
+        # Verify at least one CSV file exists
+        csv_files = glob.glob(os.path.join(cached_path, '**', '*.csv'), recursive=True)
+        if csv_files:
+            print(f"[INFO] Using cached dataset from {cached_path}")
+            return cached_path
+    
     try:
         import kagglehub
     except Exception as exc:
         print(f"[WARN] kagglehub not available: {exc}")
         return ""
     try:
+        # Download to cache directory
+        print("[INFO] Downloading NYC taxi dataset (this may take a moment)...")
         path = kagglehub.dataset_download("elemento/nyc-yellow-taxi-trip-data")
-        print("[INFO] KaggleHub dataset path:", path)
+        print(f"[INFO] Downloaded dataset to: {path}")
+        
+        # Move/copy dataset files to cache if not already there
+        csv_files = glob.glob(os.path.join(path, '**', '*.csv'), recursive=True)
+        if csv_files:
+            print(f"[INFO] Caching dataset ({len(csv_files)} CSV files)...")
+            for csv_file in csv_files[:1]:  # Cache first file
+                dst = cache_dir / os.path.basename(csv_file)
+                shutil.copy2(csv_file, dst)
+            cache_marker.write_text("Dataset cached from KaggleHub\n")
+            print(f"[INFO] Dataset cached to {cache_dir}")
+            return str(cache_dir)
+        
         return path
     except Exception as exc:
         print(f"[WARN] KaggleHub download failed: {exc}")
@@ -793,8 +825,8 @@ def price_driver(v, req, p_init, hotspot_zones, zone_rank):
         return p_init
     alpha_rank = zone_rank.get(req.d, G.n-1)
     alpha = alpha_rank / max(1, (G.n - 1))  # 0=best zone, 1=worst zone
-    # Gentle markup: at most ~10% of initial price for the worst zones
-    markup = p_init * alpha * 0.10
+    # Gentle markup: at most ~30% of initial price for the worst zones
+    markup = p_init * alpha * 0.30
     return p_init + markup
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1278,6 +1310,8 @@ class RSEnv:
         use_darm = bool(self.cfg.get("darm", True))
         allow_rideshare = bool(self.cfg.get("rideshare", True))
 
+        self.log_event(f"Step {self.t}: Starting simulation cycle", "sys")
+
         supply_f = self._forecast_supply(FORECAST_H)
         demand_f = self._forecast_demand(self.t, FORECAST_H)
         self.supply = supply_f[0]
@@ -1294,10 +1328,12 @@ class RSEnv:
         self.rejected_req += expired
         all_r = fresh_pending + reqs
         self.pending = []
+        self.log_event(f"Generated {len(reqs)} requests, {expired} expired. Total pool: {len(all_r)}", "sys")
 
         # 2. Greedy match
         avail = [v for v in self.vehicles if v.avail and (allow_rideshare or not v.pax)]
         asgn  = greedy_match(avail, all_r)
+        self.log_event(f"Greedy match: assigned {sum(len(r) for r in asgn.values())} requests to {len(avail)} available vehicles", "sys")
 
         acc=0; rej=0; wait_sum=0.0
         step_profit = {v.vid: 0.0 for v in self.vehicles}
@@ -1325,8 +1361,6 @@ class RSEnv:
                     wait = travel_time_min(v.zone, req.o, self.t)
 
                 if use_pricing:
-                    # Price based on customer's DIRECT trip distance (Eq.2),
-                    # not the full vehicle route
                     trip_km = dist_km(req.o, req.d)
                     p0   = price_initial(v, req, trip_km, wait)
                     p    = price_driver(v, req, p0, hot, rank)
@@ -1341,25 +1375,12 @@ class RSEnv:
                     step_profit[v.vid] += p
                     extra_km[v.vid] += extra
                     acc += 1; wait_sum += wait
-                    self.event_id += 1
-                    self.events.append({
-                        "id": self.event_id,
-                        "t": self.t,
-                        "type": "accept",
-                        "msg": f"V{v.vid} accepted R{req.rid} @ ${p:.2f}",
-                    })
+                    self.log_event(f"V{v.vid} accepted R{req.rid} @ ${p:.2f} (Wait: {wait:.1f}m)", "accept")
                 else:
                     self.pending.append(req); rej += 1
-                    self.event_id += 1
-                    self.events.append({
-                        "id": self.event_id,
-                        "t": self.t,
-                        "type": "reject",
-                        "msg": f"R{req.rid} rejected by V{v.vid}",
-                    })
+                    self.log_event(f"R{req.rid} rejected by V{v.vid} (Price: ${p:.2f})", "reject")
 
         # 3. Dispatch idle vehicles (after matching, per paper)
-        # Paper: first 20 min without dispatching (warm-up)
         supply_f = self._forecast_supply(FORECAST_H)
         demand_f = self._forecast_demand(self.t, FORECAST_H)
         if self.t <= WARMUP_STEPS or not use_dispatch:
@@ -1367,6 +1388,8 @@ class RSEnv:
         else:
             self.warmup_done = True
             dispatch_km = self._dispatch_idle(supply_f, demand_f)
+            num_disp = sum(1 for v in self.vehicles if v.dispatching)
+            self.log_event(f"DQN Dispatch: {num_disp} vehicles re-positioned", "dqn")
 
         # 5. Advance vehicles
         _, step_move = self._advance()
@@ -1387,11 +1410,12 @@ class RSEnv:
                           B4 * profit_step + B5 * idle_flag)
                 ns = self.agent.state(v, next_supply_f, next_demand_f, self.t + 1)
                 self.agent.observe(v.vid, float(reward), ns, False)
-
+        
         self.supply = next_supply_f[0]
         self.demand = next_demand_f[0]
-
         loss = self.agent.learn() if (self.train_mode and use_dispatch) else 0.0
+        if self.train_mode and use_dispatch:
+            self.log_event(f"Learning: Loss={loss:.4f}, ε={self.agent.avg_eps():.3f}", "dqn")
 
         # Track Q-max convergence (paper Fig. 6)
         qmax_avg = float(self.agent.zone_q.max()) if self.agent.zone_q.max() > 0 else 0.0
@@ -1421,7 +1445,18 @@ class RSEnv:
         self.rejected_req += rej
         return m
 
-    def export_state(self, metrics):
+    def log_event(self, msg, etype="info"):
+        self.event_id += 1
+        self.events.append({
+            "id": self.event_id,
+            "t": self.t,
+            "type": etype,
+            "msg": msg,
+        })
+        # Keep only last 1000 events to avoid memory blowup
+        if len(self.events) > 1000:
+            self.events = self.events[-1000:]
+
         demand = [float(x) for x in self.demand]
         zone_q = [float(x) for x in self.agent.zone_q]
         pending = []

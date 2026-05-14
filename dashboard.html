@@ -117,30 +117,62 @@
 
     <!-- ══════════ SIMULATE ══════════ -->
     <div class="page" id="p-sim">
-      <div id="sim-canvas-wrap" style="position:relative">
-        <canvas id="city" width="600" height="600"></canvas>
-        <div id="sim-tip" style="position:absolute;display:none;background:rgba(15,23,42,0.9);color:#fff;font-size:10px;padding:4px 8px;border-radius:4px;pointer-events:none;z-index:10;border:1px solid var(--bd2);white-space:nowrap;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1)"></div>
-        <div id="sim-overlay" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);border-radius:var(--r)">
-          <div style="text-align:center;color:var(--t2)"><div style="font-size:40px;margin-bottom:8px">🏙️</div><div style="font-size:13px;font-weight:600">City Grid Simulation</div><div style="font-size:10px;color:var(--t3)">Load a model or train first, then Run Demo</div></div>
-        </div>
+     <div id="sim-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding:0 4px">
+       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+         <h2 style="font-size:16px;font-weight: 700;margin:0">🏙️ Live City Simulation</h2>
+         <div id="sim-model-pill" style="font-size:11px;padding:4px 10px;border-radius:10px;background:linear-gradient(135deg,var(--a3),var(--a2));color:#fff;border:1px solid var(--a2);font-weight:600">No model active</div>
+       </div>
+       <div style="display:flex;align-items:center;gap:8px;font-size:10px;color:var(--t3)">
+         <span id="sim-time-info">t=0</span> | <span id="sim-grid-info">15×15 zones</span> | <span id="sim-vehicle-count">0 vehicles</span>
+       </div>
       </div>
-      <div id="sim-sidebar">
-        <div class="card"><div class="card-h"><span class="dot" style="background:var(--a2)"></span>Controls</div><div class="card-b">
-          <div class="fg"><label>Demo Steps</label><input type="number" id="sim-steps" value="200" min="10" max="5000"></div>
-          <div class="btn-row"><button class="btn btn-primary" id="btn-sim-run">▶ Run Demo</button><button class="btn btn-danger btn-sm" id="btn-sim-stop" disabled>⏹ Stop</button></div>
-          <div class="prog-bar"><div class="prog-fill" id="sim-prog" style="width:0"></div></div>
-          <div class="prog-text"><span id="sim-step-text">Ready</span></div>
-        </div></div>
-        <div class="card"><div class="card-h"><span class="dot" style="background:var(--a5)"></span>Fleet</div><div class="card-b" id="sim-fleet"><div style="color:var(--t3);font-size:10px">No simulation</div></div></div>
-        <div class="card"><div class="card-h"><span class="dot" style="background:var(--a3)"></span>Metrics</div><div class="card-b">
-          <div class="mc-stats"><div class="mc-stat"><div class="mc-l">AR</div><div class="mc-v" id="sm-ar">—</div></div><div class="mc-stat"><div class="mc-l">$</div><div class="mc-v" id="sm-profit">—</div></div><div class="mc-stat"><div class="mc-l">Wait</div><div class="mc-v" id="sm-wait">—</div></div><div class="mc-stat"><div class="mc-l">Occ</div><div class="mc-v" id="sm-occ">—</div></div><div class="mc-stat"><div class="mc-l">Idle</div><div class="mc-v" id="sm-idle">—</div></div><div class="mc-stat"><div class="mc-l">km</div><div class="mc-v" id="sm-km">—</div></div><div class="mc-stat"><div class="mc-l">Step</div><div class="mc-v" id="sm-trips">—</div></div></div>
-        </div></div>
-        <div class="card"><div class="card-h"><span class="dot" style="background:#818cf8">Q-Value Heatmap</div><div class="card-b">
-          <canvas id="sim-hm" style="width:100%;height:80px;border-radius:4px;background:#0f172a"></canvas>
-          <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--t3);margin-top:4px"><span>Low</span><span>High</span></div>
-        </div></div>
-        <div class="card"><div class="card-h"><span class="dot" style="background:var(--a6)"></span>Log</div><div class="card-b"><div id="sim-log" style="max-height:200px;overflow-y:auto;font-size:9px;font-family:monospace;color:var(--t2)">Waiting...</div></div></div>
-      </div>
+     <div id="sim-canvas-wrap" style="position:relative;margin-bottom:12px">
+       <canvas id="city" width="750" height="600" style="border:2px solid var(--bd2);border-radius:var(--r);width:100%;max-width:750px;height:auto;display:block"></canvas>
+       <div id="sim-tip" style="position:absolute;display:none;background:rgba(15,23,42,0.95);color:#fff;font-size:10px;padding:6px 10px;border-radius:6px;pointer-events:none;z-index:10;border:1px solid var(--a2);box-shadow:0 4px 12px rgba(0,0,0,0.3)"></div>
+       <div id="sim-overlay" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6);border-radius:var(--r)">
+         <div style="text-align:center;color:#fff"><div style="font-size:48px;margin-bottom:12px">🏙️</div><div style="font-size:14px;font-weight:600">City Grid Simulation</div><div style="font-size:11px;color:var(--t3);margin-top:8px">Load a model or train first, then Run Demo</div></div>
+       </div>
+     </div>
+     <div id="sim-sidebar">
+       <div class="card"><div class="card-h"><span class="dot" style="background:var(--a2)"></span>Controls</div><div class="card-b">
+         <div class="fg"><label>Demo Steps</label><input type="number" id="sim-steps" value="200" min="10" max="5000"></div>
+         <div class="btn-row"><button class="btn btn-primary" id="btn-sim-run">▶ Run Demo</button><button class="btn btn-danger btn-sm" id="btn-sim-stop" disabled>⏹ Stop</button></div>
+         <div class="prog-bar"><div class="prog-fill" id="sim-prog" style="width:0"></div></div>
+         <div class="prog-text"><span id="sim-step-text">Ready</span></div>
+       </div></div>
+       <div class="card"><div class="card-h"><span class="dot" style="background:#10b981"></span>Legend & Status</div><div class="card-b" id="sim-fleet">
+         <div style="font-size:10px;line-height:1.6;margin-bottom:12px">
+           <div style="margin-bottom:6px"><b style="color:var(--t2)">Vehicle Status:</b></div>
+           <div><span style="color:#3b82f6;font-weight:600">●</span> Idle – Waiting at zone</div>
+           <div><span style="color:#10b981;font-weight:600">●</span> Carrying – With passengers</div>
+           <div><span style="color:#8b5cf6;font-weight:600">●</span> Dispatching – Repositioning</div>
+           <div><span style="color:#f59e0b;font-weight:600">●</span> Occupied – Heading to pickup</div>
+           <div style="margin-top:8px;margin-bottom:6px"><b style="color:var(--t2)">Stops:</b></div>
+           <div><span style="color:#10b981;font-weight:600">◆</span> Pickup – Green flag</div>
+           <div><span style="color:#ef4444;font-weight:600">◆</span> Dropoff – Red flag</div>
+           <div><span style="color:var(--t3);font-size:9px;margin-top:8px">Orange heatmap = high demand zones</span></div>
+           <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:9px;padding-top:8px;border-top:1px solid var(--bd)">
+             <div><b>Idle:</b> <span id="sm-idle-count">0</span></div>
+             <div><b>Carrying:</b> <span id="sm-carry-count">0</span></div>
+             <div><b>Dispatch:</b> <span id="sm-dispatch-count">0</span></div>
+             <div><b>Pending Req:</b> <span id="sm-pending-count">0</span></div>
+           </div>
+         </div>
+       </div></div>
+       <div class="card"><div class="card-h"><span class="dot" style="background:var(--a3)"></span>Metrics</div><div class="card-b">
+         <div class="mc-stats"><div class="mc-stat"><div class="mc-l">AR</div><div class="mc-v" id="sm-ar">—</div></div><div class="mc-stat"><div class="mc-l">$</div><div class="mc-v" id="sm-profit">—</div></div><div class="mc-stat"><div class="mc-l">Wait</div><div class="mc-v" id="sm-wait">—</div></div><div class="mc-stat"><div class="mc-l">Occ</div><div class="mc-v" id="sm-occ">—</div></div><div class="mc-stat"><div class="mc-l">Idle</div><div class="mc-v" id="sm-idle">—</div></div><div class="mc-stat"><div class="mc-l">km</div><div class="mc-v" id="sm-km">—</div></div><div class="mc-stat"><div class="mc-l">Step</div><div class="mc-v" id="sm-trips">—</div></div></div>
+       </div></div>
+       <div class="card"><div class="card-h"><span class="dot" style="background:#818cf8">Q-Value Heatmap</div><div class="card-b">
+         <canvas id="sim-hm" style="width:100%;height:80px;border-radius:4px;background:#0f172a"></canvas>
+         <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--t3);margin-top:4px"><span style="color:var(--t3)">Low Value</span><span style="color:var(--a2)">High Value</span></div>
+       </div></div>
+       <div class="card"><div class="card-h"><span class="dot" style="background:var(--a6)"></span>Log</div><div class="card-b"><div id="sim-log" style="max-height:200px;overflow-y:auto;font-size:9px;font-family:monospace;color:var(--t2)">Waiting...</div></div></div>
+       <div class="card"><div class="card-h"><span class="dot" style="background:var(--t3)">Visual Guide</div><div class="card-b" style="font-size:9px;color:var(--t3);line-height:1.5">
+         <div><b style="color:var(--t2)">Grid Background:</b> Yellow intensity → Higher Demand</div>
+         <div><b style="color:var(--t2)">Blue Dots:</b> Pending ride requests</div>
+         <div><b style="color:var(--t2)">Lines:</b> Vehicle routes (Green: Pickup, Red: Dropoff)</div>
+       </div></div>
+     </div>
     </div>
 
     <!-- ══════════ MODELS ══════════ -->

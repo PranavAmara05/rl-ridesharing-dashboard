@@ -492,6 +492,7 @@ class APIHandler(SimpleHTTPRequestHandler):
                     "metrics": train_state["metrics"],
                     "history": {k: v[-200:] for k, v in train_state["history"].items()},
                     "config": train_state["config"],
+                    "model_id": train_state.get("model_id"),
                 })
         elif path == "/api/models":
             self._json(list_models())
