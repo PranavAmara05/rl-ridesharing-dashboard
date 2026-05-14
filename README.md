@@ -256,15 +256,29 @@ We systematically remove one component at a time to measure its contribution:
 | -DARM (greedy only) | Insertion matching | How much better is DARM vs nearest-vehicle? |
 
 ### 6.4 Interactive Training Dashboard
-
 A web-based workbench with 4 tabs:
 
 | Tab | Features |
 |-----|----------|
 | **🎯 Train** | Algorithm selector, 15+ parameter sliders, live training metrics (AR, wait, occupancy, idle, distance) + charts (AR, profit, wait, loss, epsilon, Q-max), auto-save prompt |
-| **🏙️ Simulate** | City grid visualization, fleet status, event log, real-time metrics (AR, wait, occupancy, idle, distance) |
+| **🏙️ Simulate** | High-fidelity city grid visualization, fleet status, semantic event log, real-time metrics (AR, wait, occupancy, idle, distance) |
 | **💾 Models** | Save/load model library, metadata (algorithm, params, final metrics), delete old models |
 | **📊 Compare** | Select 2+ saved models, run side-by-side evaluation, bar charts + comparison table |
+
+### 6.5 Congestion-Aware Routing & Pricing
+We've moved beyond deterministic costs to a dynamic model:
+- **Dynamic Cost**: Routing now considers real-time zone congestion, meaning the "shortest" path is not always the "fastest".
+- **Surcharge Model**: The DPRS pricing mechanism now includes a **Congestion Surcharge**. If a request originates in a high-traffic zone, the fare increases to reflect the operational difficulty.
+
+### 6.6 Adaptive DQN Exploration
+To prevent the agent from getting stuck in local optima:
+- **Stagnation Detection**: The agent monitors the **Accept Rate (AR)** trend.
+- **$\epsilon$-Bump**: If AR fails to improve for 50 steps, the exploration rate ($\epsilon$) is automatically increased, forcing the agent to explore new dispatching strategies.
+
+### 6.7 Weighted Preference Matching
+Replacing the basic greedy match with a professional-grade priority system:
+- **Occupancy Priority**: Requests with more passengers are prioritized to maximize vehicle utilization.
+- **Compatibility Scoring**: Matching is based on a weighted score of distance AND vehicle type preference, ensuring riders get the class of vehicle they prefer.
 
 ---
 
@@ -392,9 +406,8 @@ The Simulate tab features a **real-time city grid visualization** that clearly s
 - **Passenger Count**: White number inside vehicle circle shows passenger load
 - **Route Visualization**: Lines show planned stops with pickup (green) and dropoff (red) markers
 - **Legend Panel**: Complete reference for all colors and symbols
-- **Live Status**: Real-time vehicle counts (Idle, Carrying, Dispatching, Pending)
+- **Semantic Event Log**: A high-fidelity feed with color-coded events (Green for accepts, Indigo for DQN, Red for rejections) that exposes the agent's internal logic in real-time.
 - **Metrics Display**: Accept rate, profit, wait time, occupancy, distance, steps
-
 #### Interpreting the Visualization
 
 1. **Orange background intensity** = demand concentration in that zone
@@ -511,6 +524,10 @@ The dashboard and API report the following evaluation metrics:
 ✨ Component ablation study
 ✨ Interactive parameter exploration via dashboard
 ✨ Model persistence and comparison framework
+✨ Adaptive $\epsilon$-decay for DQN exploration
+✨ Congestion-weighted routing and pricing
+✨ Preference-aware vehicle matching
+✨ High-fidelity semantic event logging
 
 ---
 
