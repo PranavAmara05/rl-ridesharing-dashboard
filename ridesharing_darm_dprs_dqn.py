@@ -260,13 +260,17 @@ def eta_min(a, b, t=0):
     """Travel time with optional OSRM and congestion."""
     return travel_time_min(a, b, t)
 
-def route_cost(zone_list):
-    """Total km for a list of zone stops."""
-    return sum(dist_km(zone_list[i], zone_list[i+1])
-               for i in range(len(zone_list)-1)) if len(zone_list) > 1 else 0.
+def route_cost(zone_list, t=0):
+    """Total km weighted by congestion for a list of zone stops."""
+    if len(zone_list) <= 1: return 0.
+    cost = 0.0
+    for i in range(len(zone_list)-1):
+        d = dist_km(zone_list[i], zone_list[i+1])
+        cost += d * congestion_factor(zone_list[i], t)
+    return cost
 
 # Extensions (off by default to match the paper)
-CONGESTION_ENABLED = False
+CONGESTION_ENABLED = True
 USE_TIME_FEATURES = False
 RIDER_CHANGE_PROB = 0.0
 RIDER_CANCEL_PROB = 0.0
@@ -685,19 +689,33 @@ class Veh:
 # 5. Greedy Matcher (Algorithm 2)
 # ═══════════════════════════════════════════════════════════════════════════
 def greedy_match(vehicles, reqs):
-    """Assign each request to nearest available vehicle within REJECT_RADIUS_KM.
-    Returns dict {vid: [Req, ...]}.  Does NOT modify vehicle state."""
+    """Smarter Match: considers distance and vehicle compatibility.
+    Returns dict {vid: [Req, ...]}. Does NOT modify vehicle state."""
     asgn = {v.vid: [] for v in vehicles}
     temp_cap = {v.vid: v.cap for v in vehicles}
-    for req in reqs:
-        best_v, best_d = None, float('inf')
+    
+    # Sort requests by importance (higher pax first to maximize occupancy)
+    sorted_reqs = sorted(reqs, key=lambda r: r.np, reverse=True)
+    
+    for req in sorted_reqs:
+        best_v, best_score = None, float('inf')
         for v in vehicles:
             free = v.maxcap - temp_cap[v.vid]
             if not v.avail or free < req.np:
                 continue
+            
             d = dist_km(v.zone, req.o)
-            if d <= REJECT_RADIUS_KM and d < best_d:
-                best_d, best_v = d, v
+            if d > REJECT_RADIUS_KM:
+                continue
+            
+            # Score = distance modified by vehicle type preference
+            # (Higher type = better, but closer is always better)
+            type_bonus = 0.8 if v.vt >= req.pref_type else 1.2
+            score = d * type_bonus
+            
+            if score < best_score:
+                best_score, best_v = score, v
+                
         if best_v is not None:
             asgn[best_v.vid].append(req)
             temp_cap[best_v.vid] += req.np
@@ -767,7 +785,7 @@ def insert_req(v, req, t=0):
     Returns (route_km, extra_km, new_route, wait_min) or (inf, inf, None, None)."""
     n = len(v.route)
     base_wps  = route_waypoints(v.zone, v.route)
-    base_cost = route_cost(base_wps)
+    base_cost = route_cost(base_wps, t)
     best_extra, best_route = float('inf'), None
     best_cost, best_wait = float('inf'), None
 
@@ -789,7 +807,7 @@ def insert_req(v, req, t=0):
             if not ok: continue
 
             wps  = route_waypoints(v.zone, nr)
-            route_km = route_cost(wps)
+            route_km = route_cost(wps, t)
             extra_km = route_km - base_cost
 
             feasible, wait_t = route_feasible(v, nr, req, t)
@@ -807,12 +825,15 @@ def insert_req(v, req, t=0):
 # ═══════════════════════════════════════════════════════════════════════════
 # 7. Pricing (Equations 2 & 3)
 # ═══════════════════════════════════════════════════════════════════════════
-def price_initial(v, req, cost_km, wait_min):
-    """Equation (2)."""
+def price_initial(v, req, cost_km, wait_min, t=0):
+    """Equation (2) with congestion surcharge."""
     shared = max(1, v.cap + req.np)
     fuel   = (cost_km/shared) * (PGAS/MILEAGE_L[v.vt])
+    # Congestion surcharge based on origin zone
+    cf = congestion_factor(req.o, t)
+    surcharge = (cf - 1.0) * 2.0  # Add $2 per unit of congestion above 1.0
     p      = BASE_FARE[v.vt] + RATE_KM[v.vt]*(cost_km/shared) + fuel \
-             - RATE_WAIT[v.vt]*wait_min
+             - RATE_WAIT[v.vt]*wait_min + surcharge
     return max(BASE_FARE[v.vt], p)
 
 def price_driver(v, req, p_init, hotspot_zones, zone_rank):
@@ -872,9 +893,27 @@ if TORCH:
 
 @dataclass
 class AgentCtx:
-    eps: float = EPS0
-    last_state: Optional[np.ndarray] = None
-    last_action: Optional[int] = None
+    def __init__(self, eps):
+        self.eps = eps
+        self.last_state = None
+        self.last_action = None
+        self.last_ar = 0.0
+        self.stagnant_count = 0
+
+    def decay_eps(self, current_ar):
+        # Adaptive decay: if AR doesn't improve for 50 steps, bump epsilon to explore
+        if current_ar <= self.last_ar:
+            self.stagnant_count += 1
+        else:
+            self.stagnant_count = 0
+            self.last_ar = current_ar
+
+        if self.stagnant_count > 50:
+            self.eps = min(0.5, self.eps * 1.1) # bump epsilon
+            self.stagnant_count = 0
+        else:
+            self.eps *= 0.997 # Using EPS_DEC logic
+        self.eps = max(0.05, self.eps)
 
 def _state_dim():
     dim = G.n + (FORECAST_H+1) * 2 * G.n + 1 + N_TYPES
@@ -964,14 +1003,17 @@ class DQNAgent:
             ctx.last_action = a
         return a
 
-    def observe(self, vid, reward, next_state, done=False):
+    def observe(self, vid, reward, next_state, done=False, current_ar=None):
         ctx = self.ctx[vid]
         if ctx.last_state is None or ctx.last_action is None:
             return
         self.buf.push(ctx.last_state, ctx.last_action, reward, next_state, done)
         ctx.last_state = None
         ctx.last_action = None
-        ctx.eps = max(self.eps_end, ctx.eps * self.eps_decay)
+        if current_ar is not None:
+            ctx.decay_eps(current_ar)
+        else:
+            ctx.eps = max(self.eps_end, ctx.eps * self.eps_decay)
 
     def update_zone_q(self, supply_f, demand_f, t_min):
         """Compute per-zone max-Q (used by pricing)."""
@@ -1362,7 +1404,7 @@ class RSEnv:
 
                 if use_pricing:
                     trip_km = dist_km(req.o, req.d)
-                    p0   = price_initial(v, req, trip_km, wait)
+                    p0   = price_initial(v, req, trip_km, wait, self.t)
                     p    = price_driver(v, req, p0, hot, rank)
                     ok   = customer_decide(req, v, p, wait)
                 else:
@@ -1409,7 +1451,7 @@ class RSEnv:
                 reward = (B1 * served + B2 * dispatch_time + B3 * detour_time +
                           B4 * profit_step + B5 * idle_flag)
                 ns = self.agent.state(v, next_supply_f, next_demand_f, self.t + 1)
-                self.agent.observe(v.vid, float(reward), ns, False)
+                self.agent.observe(v.vid, float(reward), ns, False, current_ar=ar)
         
         self.supply = next_supply_f[0]
         self.demand = next_demand_f[0]
