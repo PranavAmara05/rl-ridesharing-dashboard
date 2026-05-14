@@ -70,6 +70,30 @@ def broadcast_sse(data):
     for q in dead:
         sse_clients.remove(q)
 
+_last_sim_state = {}
+
+def broadcast_sim_state():
+    """Broadcast current simulation state with delta compression."""
+    global current_env, _last_sim_state
+    if current_env is None:
+        return
+
+    m = current_env.metrics
+    metrics = {
+        "ar": m.get("ar", [0])[-1] if m.get("ar") else 0,
+        "idle_frac": m.get("idle_frac", [0])[-1] if m.get("idle_frac") else 0,
+        "occ": m.get("occ", [0])[-1] if m.get("occ") else 0,
+        "wait": m.get("wait", [0])[-1] if m.get("wait") else 0,
+        "km": m.get("km", [0])[-1] if m.get("km") else 0,
+    }
+    full_state = current_env.export_state(metrics)
+    
+    snapshot = {
+        "type": "sim_update",
+        "state": full_state
+    }
+    broadcast_sse(snapshot)
+
 def emit_state():
     """Broadcast current training state to all SSE clients."""
     with train_lock:
@@ -191,6 +215,14 @@ def training_worker(config):
                 break
 
             env.step()
+            broadcast_sim_state()
+            
+            # Auto-save best model if performance peaked
+            # We check if the internal best_metric has updated since our last known peak
+            # Note: env.best_metric is updated during env.step()
+            if env.best_metric > train_state.get("last_best", -float('inf')):
+                train_state["last_best"] = env.best_metric
+                save_best_model()
 
             did_eval = False
             if eval_interval > 0 and (step % max(1, eval_interval) == 0):
@@ -292,6 +324,35 @@ def list_models():
             pass
     models.sort(key=lambda m: m.get("timestamp", ""), reverse=True)
     return models
+
+def save_best_model():
+    """Saves the current model as 'best_model' (overwrites previous best)."""
+    global current_env
+    if current_env is None: return
+    
+    model_id = "best_model"
+    model_dir = os.path.join(MODELS_DIR, model_id)
+    if os.path.exists(model_dir):
+        shutil.rmtree(model_dir)
+    os.makedirs(model_dir, exist_ok=True)
+    
+    model_path = os.path.join(model_dir, "model.pt")
+    current_env.agent.save(model_path)
+    
+    meta = {
+        "id": model_id,
+        "name": "Best Performance Model",
+        "description": "Automatically saved best-performing model (Profit * AR peak).",
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "config": train_state.get("config", {}),
+        "final_metrics": train_state.get("metrics", {}),
+        "steps_trained": train_state.get("step", 0),
+        "model_path": model_path,
+    }
+    with open(os.path.join(model_dir, "meta.json"), "w") as f:
+        json.dump(meta, f, indent=2)
+    with open(os.path.join(model_dir, "history.json"), "w") as f:
+        json.dump(train_state.get("history", {}), f)
 
 def save_model(name, description=""):
     """Save current model to disk with metadata."""
@@ -549,6 +610,12 @@ class APIHandler(SimpleHTTPRequestHandler):
                     "km": m.get("km", [0])[-1] if m.get("km") else 0,
                 }
                 self._json(env.export_state(metrics))
+        elif path == "/api/insights":
+            env = current_env
+            if env is None:
+                self._json({"error": "No simulation running"}, 404)
+            else:
+                self._json(env.get_insights())
         else:
             super().do_GET()
 

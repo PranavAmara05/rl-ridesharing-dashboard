@@ -86,7 +86,7 @@ RATE_KM              = [1.5, 2.0, 2.5]   # $/km  (ω1)
 RATE_WAIT            = [0.1, 0.15, 0.2]  # $/min  (ω3)
 PGAS                 = 1.5   # $/litre
 
-REJECT_RADIUS_KM     = 3.0         # max pickup distance (paper: 5 km)
+REJECT_RADIUS_KM     = 4.0         # Increased from 3.0 to reduce idleness
 MAX_IDLE_MIN         = 10          # dispatch idle vehicles after this
 
 # Forecast horizon for supply/demand in DQN state (t:t+T)
@@ -110,7 +110,7 @@ WARMUP_STEPS = 20          # Paper: 20 min without dispatching
 # SOLUTION: normalize by typical values to get -1...+1 range
 B1,B2,B3,B4,B5 = 20, -0.5, -0.3, 1.0, 0.0  # B5=0 (no idle penalty!)
 # Customer weights (Eq. 4)
-W4,W5,W6 = 15,1,4
+W4,W5,W6 = 15,1,4  # Original weights
 HOTSPOT_FRAC = 0.10
 
 SEED = 42
@@ -840,43 +840,42 @@ def price_initial(v, req, cost_km, wait_min, t=0):
 
 def price_driver(v, req, p_init, hotspot_zones, zone_rank):
     """Equation (3) -- driver adjusts price based on destination zone Q-value.
-    FIXED: Markup was too aggressive. Paper shows 96% AR, so pricing must be
-    much gentler. Only small markup for truly undesirable zones.
+    If destination is a hotspot, driver keeps base price (willing to go there).
+    Otherwise, driver adds a small markup proportional to how undesirable the zone is.
+    Paper: markup should be small enough that customer rejection stays ~5%.
     """
     if req.d in hotspot_zones:
         return p_init
-    
     alpha_rank = zone_rank.get(req.d, G.n-1)
     alpha = alpha_rank / max(1, (G.n - 1))  # 0=best zone, 1=worst zone
-    
-    # FIXED: Much gentler markup to increase AR to ~96%
-    # Original: p_init * alpha * 0.30 was too much
-    # New: only ~5% markup for worst zones to maintain equilibrium
-    markup = p_init * alpha * 0.05
+    # Gentle markup: at most ~30% of initial price for the worst zones
+    markup = p_init * alpha * 0.30
     return p_init + markup
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 8. Customer Decision (Equations 4 & 5)
 # ═══════════════════════════════════════════════════════════════════════════
 def customer_decide(req, v, price, wait_min):
-    """Return True if customer accepts (Eq. 4 & 5).
-    FIXED: The utility function should make accept rate ~96% like the paper.
-    The problem was utility weights W4-W6 were too high, making customers too picky.
-    Solution: Reduce utility thresholds so customers accept more often.
-    """
-    # Sharing preference: customer who doesn't want pooling rejects if vehicle has pax
-    if not req.share and len(v.pax) > 0: return False
+    """Return (accepted, reason) where reason is None if accepted,
+    or 'price', 'wait', 'sharing' if rejected."""
+    # Sharing preference
+    if not req.share and len(v.pax) > 0: return False, 'sharing'
     
-    # Utility (Eq. 4) - FIXED: use lower weights to increase acceptance
-    # Original was too harsh. Paper achieves 96% AR, so utility threshold should be lower.
-    u = (8.0 / max(1, v.cap+1) + 0.5 / max(1., wait_min) +
-        2.0 * (1.0 if v.vt >= req.pref_type else 0.5) * (v.vt+1))
+    # Vehicle type is a soft preference
+    type_bonus = 1.0 if v.vt >= req.pref_type else 0.5
     
-    # Accept (Eq. 5) - FIXED: lower threshold (was using price - delta which is too strict)
-    # Paper: customers accept if utility >= (price - willingness_to_pay)
-    # We approximate willingness_to_pay as a function of trip distance
-    willingness = 3.0 + (dist_km(req.o, req.d) * 0.5)  # willing to pay more for longer trips
-    return u >= (price - willingness)
+    # Utility (Eq. 4)
+    u = (W4 / max(1, v.cap+1) + W5 / max(1., wait_min) +
+        W6 * type_bonus * (v.vt+1))
+    
+    # Accept (Eq. 5)
+    if u >= (price - req.delta):
+        return True, None
+    else:
+        # Determine if price or wait was the primary driver of rejection
+        # If wait was very high, it's likely the wait
+        if wait_min > req.max_wait * 0.8: return False, 'wait'
+        return False, 'price'
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 9. DQN (Double DQN with numpy fallback)
@@ -1215,17 +1214,37 @@ class RSEnv:
         self.total_req = 0
         self.served_req = 0
         self.rejected_req = 0
+        self.rejection_stats = collections.defaultdict(int) # 'price', 'wait', 'sharing'
         self.events = collections.deque(maxlen=200)
         self.event_id = 0
         self.model_path = ""
         self.warmup_done = False
         self.qmax_history = []   # Track Q-max convergence (paper Fig.6)
+        self.best_metric = -float('inf') # Track Profit + AR sum for best-model
         self._spawn_fleet()
 
     def _spawn_fleet(self):
         for i in range(N_VEHICLES):
             self.vehicles.append(Veh(vid=i, vt=random.randint(0,N_TYPES-1),
                                      zone=G.rand()))
+
+    def calculate_gini(self):
+        """Calculate Gini coefficient of vehicle profits for fairness analysis."""
+        profits = np.array([v.profit for v in self.vehicles], dtype=np.float64)
+        if profits.size == 0: return 0.0
+        profits = np.sort(profits)
+        n = profits.size
+        index = np.arange(1, n + 1)
+        return (np.sum((2 * index - n - 1) * profits)) / (n * np.sum(profits)) if np.sum(profits) > 0 else 0.0
+
+    def get_insights(self):
+        """Return comprehensive operational insights for the dashboard."""
+        return {
+            "rejections": dict(self.rejection_stats),
+            "gini": self.calculate_gini(),
+            "q_map": self.agent.zone_q.tolist() if hasattr(self.agent, 'zone_q') else [],
+            "best_metric": self.best_metric
+        }
 
     def _forecast_supply(self, horizon):
         out = np.zeros((horizon+1, G.n), np.float32)
@@ -1418,11 +1437,11 @@ class RSEnv:
                     trip_km = dist_km(req.o, req.d)
                     p0   = price_initial(v, req, trip_km, wait, self.t)
                     p    = price_driver(v, req, p0, hot, rank)
-                    ok   = customer_decide(req, v, p, wait)
+                    ok, reason = customer_decide(req, v, p, wait)
                 else:
                     p = BASE_FARE[v.vt] + RATE_KM[v.vt] * dist_km(req.o, req.d)
-                    ok = True
-
+                    ok, reason = True, None
+                
                 if ok:
                     v.route  = new_route
                     v.profit += p
@@ -1432,7 +1451,8 @@ class RSEnv:
                     self.log_event(f"V{v.vid} accepted R{req.rid} @ ${p:.2f} (Wait: {wait:.1f}m)", "accept")
                 else:
                     self.pending.append(req); rej += 1
-                    self.log_event(f"R{req.rid} rejected by V{v.vid} (Price: ${p:.2f})", "reject")
+                    if reason: self.rejection_stats[reason] += 1
+                    self.log_event(f"R{req.rid} rejected by V{v.vid} ({reason.capitalize()} | Price: ${p:.2f})", "reject")
 
         # 3. Dispatch idle vehicles (after matching, per paper)
         supply_f = self._forecast_supply(FORECAST_H)
@@ -1499,6 +1519,15 @@ class RSEnv:
         loss = self.agent.learn() if (self.train_mode and use_dispatch) else 0.0
         if self.train_mode and use_dispatch:
             self.log_event(f"Learning: Loss={loss:.4f}, ε={self.agent.avg_eps():.3f}", "dqn")
+            
+            # Best-Model Tracking: Auto-save if this step's Profit * AR is a new peak
+            total_profit = sum(v.profit for v in self.vehicles)
+            perf_score = total_profit * ar
+            if perf_score > self.best_metric:
+                self.best_metric = perf_score
+                # Logic to save the model as 'best_model.pt' handled via api_server save calls usually, 
+                # but we track the metric here.
+                self.log_event(f"New best performance peak: {perf_score:.2f} (Profit: ${total_profit:.2f}, AR: {ar:.2%})", "sys")
 
         # Track Q-max convergence (paper Fig. 6)
         qmax_avg = float(self.agent.zone_q.max()) if self.agent.zone_q.max() > 0 else 0.0

@@ -30,6 +30,9 @@ const VEH_COLORS = {
   carrying: '#10b981'
 };
 
+// Animation state for smooth transit
+let vehPositions = {}; // { vid: {x, y, targetX, targetY} }
+
 function l2g(a) {
     const g = [];
     for (let r = 0; r < GRID_SIZE; r++) {
@@ -609,11 +612,19 @@ function drawCityGrid(simState) {
   // 4. Vehicles
   const vs = simState.vehicles;
   for (const v of vs) {
-    const vx = (v.c + 0.5) * cw, vy = (v.r + 0.5) * ch;
+    const vid = v.id || v.vid;
+    const tx = (v.c + 0.5) * cw, ty = (v.r + 0.5) * ch;
     
+    // Interpolate position for smooth transit
+    if (!vehPositions[vid]) vehPositions[vid] = {x: tx, y: ty};
+    const pos = vehPositions[vid];
+    pos.x += (tx - pos.x) * 0.2; // Smooth glide toward target
+    pos.y += (ty - pos.y) * 0.2;
+    const vx = pos.x, vy = pos.y;
+
     // Route lines
     if (v.route && v.route.length > 0) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+     ctx.strokeStyle = 'rgba(255,255,255,0.1)';
       ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(vx, vy);
       for (const s of v.route) {
